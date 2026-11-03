@@ -1,5 +1,9 @@
 // What a handler gets besides its input: the task, its lessons, and the way to ask, remember, report steps and schedule
 // more work. Every call goes to ai signed as the agent, under the task's attempt.
+//
+// A task works for one tenant (ctx.tenant: a user, an account, a team, a business; "" when no one in particular). Its memory calls name the
+// task, and ai takes the tenant from it: whatever the model is talked into, a task reaches its own tenant's memory and
+// no other's. A task it schedules (ctx.later) is for the same tenant and thread.
 
 import type { Client } from './http.ts';
 import { query } from './http.ts';
@@ -7,7 +11,7 @@ import type { Answer, Fact, Json, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
 
 export interface Delivery {
-  task: { id: string; kind: string; input: Json; attempt: number; by: Task['by']; trial: boolean; judges: string | null; createdAt: string };
+  task: { id: string; kind: string; input: Json; attempt: number; by: Task['by']; trial: boolean; judges: string | null; createdAt: string; tenant?: string; thread?: string | null };
   /** The last answer only: what an ai from before the journal sends. */
   resume: (Answer & { pause: string; action: string }) | null;
   /** Every answer the task's questions got, in the order asked (free ones too). */
@@ -19,6 +23,11 @@ export interface Delivery {
 
 export interface Context {
   task: Delivery['task'];
+  /** Whom it works for in this task (a user, an account, a team, a business): its memory, freedom, lessons and caps are that tenant's.
+   *  "" when the asker named no one. */
+  tenant: string;
+  /** The conversation it belongs to (a customer, a ticket), when the asker named one. */
+  thread: string | null;
   /** The live lessons this task carries: put them in the prompt. */
   lessons: string[];
   /** A trial replays an old task with new lessons: do nothing real. */
@@ -36,8 +45,9 @@ export interface Context {
   /** A model call, timed and reported with its model and tokens read from the answer (Claude, OpenAI, the AI SDK):
    *  `await ctx.model(() => claude.messages.create({ … }))`. `name` defaults to the model. Done once per task, as track. */
   model<T>(work: () => Promise<T>, name?: string): Promise<T>;
-  /** A task for later (a reminder, a follow-up). Done once per task, as track. */
+  /** A task for later (a reminder, a follow-up), for the same tenant and thread. Done once per task, as track. */
   later(kind: string, input: Json, at: Date | string, key?: string): Promise<void>;
+  /** This tenant's memory (this task's): the agent's room is shared by all its tenants, each fact is one tenant's. */
   memory: {
     /** Done once per task, as track. */
     remember(scope: string, text: string, extra?: { key?: string; data?: Json }): Promise<Fact>;
@@ -108,8 +118,10 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     }
   }
 
+  const tenant = task.tenant ?? '';
+  const thread = task.thread ?? null;
   return {
-    task, lessons: delivery.lessons.items, trial: task.trial,
+    task, tenant, thread, lessons: delivery.lessons.items, trial: task.trial,
     async ask(action, question, extra = {}) {
       const answer = answers[nextAnswer];
       if (answer && answer.action === action) {
@@ -131,17 +143,17 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     track: (kind, name, work, usage) => once(kind, name, name, work, (value) => (usage ? usage(value) : {})),
     model: (work, name) => once('model', name ?? '', (value) => name ?? usageOf(value).model ?? 'model', work, usageOf),
     later: (kind, input, at, key) => once('other', `later:${kind}`, `later ${kind}`, async () => {
-      await call('POST', '/agent/tasks', { kind, input, at: new Date(at).toISOString(), ...(key ? { key } : {}) }, { idempotent: Boolean(key) });
+      await call('POST', '/agent/tasks', { kind, input, at: new Date(at).toISOString(), ...(key ? { key } : {}), ...(tenant ? { tenant } : {}), ...(thread ? { thread } : {}) }, { idempotent: Boolean(key) });
     }, () => ({})),
     memory: {
       remember: (scope, text, extra = {}) => once('memory', `remember:${scope}`, 'remember', async () =>
         // without a key each one is a new fact: sent twice it would be two
-        (await call<{ fact: Fact }>('PUT', '/agent/memory', { scope, text, ...extra }, { idempotent: Boolean(extra.key) })).fact, () => ({})),
+        (await call<{ fact: Fact }>('PUT', '/agent/memory', { task: task.id, scope, text, ...extra }, { idempotent: Boolean(extra.key) })).fact, () => ({})),
       async recall(options) {
-        return (await call<{ facts: Fact[] }>('GET', `/agent/memory${query(options)}`)).facts;
+        return (await call<{ facts: Fact[] }>('GET', `/agent/memory${query({ ...options, task: task.id })}`)).facts;
       },
       async forget(id) {
-        await call('DELETE', `/agent/memory/${id}`);
+        await call('DELETE', `/agent/memory/${id}${query({ task: task.id })}`);
       },
     },
   };

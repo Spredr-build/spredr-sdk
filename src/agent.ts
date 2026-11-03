@@ -4,13 +4,15 @@
 // the task's journal (context.ts), so every question already answered and every ctx step already done gives back what it
 // gave instead of happening again. Only code outside ctx runs twice: side effects go in ctx.track.
 // On SIGTERM (a deploy, a stop) it takes no new task and lets the running ones finish, up to shutdownGraceMs.
+// listen() is its own small server; handle() is the same thing inside a server you already run (start() says hello,
+// your server's shutdown calls close()).
 
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { contextFor, PAUSED, type Context, type Delivery } from './context.ts';
 import { ConflictError } from './errors.ts';
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { validated, type InferInput, type InferOutput, type StandardSchemaV1 } from './schema.ts';
-import { aiVerifier, privateKeyOf } from './sign.ts';
+import { aiVerifier, privateKeyOf, type Incoming } from './sign.ts';
 import type { Feedback, Json, Kinds, Task } from './types.ts';
 
 export type { Context, Delivery } from './context.ts';
@@ -44,6 +46,13 @@ export interface AgentOptions extends Manifest, ClientOptions {
   log?: ((line: string) => void) | false;
   /** On SIGTERM, how long running tasks may finish before it exits, in ms: 25 s by default. */
   shutdownGraceMs?: number;
+}
+
+/** What handle() answers ai with: send it back as it is. */
+export interface AgentAnswer {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
 }
 
 /** The kinds an agent handles, to type a Caller with: `new Caller<KindsOf<typeof agent>>()`. */
@@ -127,7 +136,7 @@ export class Agent<K extends Kinds = {}> {
 
   /** Listens for tasks (and answers /health), then says hello. On SIGTERM it closes and exits. */
   async listen(port = Number(process.env.PORT ?? 8080)): Promise<Server> {
-    const server = createServer((request, response) => void this.#serve(request, response.writeHead.bind(response), (body) => response.end(body)));
+    const server = createServer((request, response) => void this.#serve(request, response));
     await new Promise<void>((resolve) => server.listen(port, resolve));
     this.#server = server;
     this.#log(`listening on ${port}`);
@@ -148,41 +157,47 @@ export class Agent<K extends Kinds = {}> {
     await closed;
   }
 
-  async #serve(request: IncomingMessage, head: (status: number, headers?: Record<string, string>) => unknown, end: (body?: string) => unknown): Promise<void> {
-    if (request.url === '/health') {
-      head(this.#closing ? 503 : 200);
-      end(this.#closing ? 'closing' : 'ok');
-      return;
-    }
-    if (request.method !== 'POST' || request.url !== this.#taskPath) {
-      head(404);
-      end();
-      return;
-    }
-    const body = await read(request);
-    if (!body || !this.#verify({ method: 'POST', path: request.url, headers: request.headers, body })) {
-      head(401, { 'content-type': 'application/json' });
-      end(JSON.stringify({ error: 'not signed by ai' }));
-      return;
-    }
-    if (this.#closing) {
-      head(503, { 'content-type': 'application/json' });
-      end(JSON.stringify({ error: 'this agent is closing' }));
-      return;
-    }
+  /** Where ai sends its tasks: route this path to `handle()` when the agent lives inside your own server. */
+  get path(): string {
+    return this.#taskPath;
+  }
+
+  /** One request from ai, answered: for an agent inside a server you already run (Fastify, Express, Hono). Give it the
+   *  raw body exactly as it arrived, since the signature is over those bytes, and send back what it returns. The task's
+   *  handler runs after the answer, as with listen(). Call start() once to say hello, and close() when your server stops. */
+  async handle(request: Incoming): Promise<AgentAnswer> {
+    const json = (status: number, body: Json): AgentAnswer => ({ status, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (request.method !== 'POST' || request.path !== this.#taskPath) return { status: 404, headers: {}, body: '' };
+    if (!this.#verify(request)) return json(401, { error: 'not signed by ai' });
+    if (this.#closing) return json(503, { error: 'this agent is closing' });
     // ai's own JSON, checked by its signature
-    const delivery = JSON.parse(body.toString('utf8')) as Delivery;
+    const delivery = JSON.parse(typeof request.body === 'string' ? request.body : Buffer.from(request.body).toString('utf8')) as Delivery;
     const handler = this.#handlers.get(delivery.task.kind);
-    if (!handler) {
-      head(200, { 'content-type': 'application/json' });
-      end(JSON.stringify({ error: `this agent does not handle «${delivery.task.kind}» tasks` }));
+    if (!handler) return json(200, { error: `this agent does not handle «${delivery.task.kind}» tasks` });
+    const running = this.#run(handler, delivery).finally(() => this.#running.delete(running));
+    this.#running.add(running);
+    return { status: 202, headers: {}, body: '' };
+  }
+
+  /** Says hello to ai, for an agent inside your own server (listen() does this itself). Your server owns the shutdown:
+   *  call close() in it, and the running tasks get their grace. */
+  async start(): Promise<void> {
+    await this.hello();
+    this.#log('said hello to ai');
+  }
+
+  async #serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (request.url === '/health') {
+      response.writeHead(this.#closing ? 503 : 200).end(this.#closing ? 'closing' : 'ok');
       return;
     }
-    head(202);
-    end();
-    const running = this.#run(handler, delivery);
-    this.#running.add(running);
-    await running.finally(() => this.#running.delete(running));
+    const body = request.method === 'POST' && request.url === this.#taskPath ? await read(request) : Buffer.alloc(0);
+    if (!body) {
+      response.writeHead(413).end();
+      return;
+    }
+    const answer = await this.handle({ method: request.method ?? '', path: request.url ?? '', headers: request.headers, body });
+    response.writeHead(answer.status, answer.headers).end(answer.body);
   }
 
   async #run(handler: Run, delivery: Delivery): Promise<void> {

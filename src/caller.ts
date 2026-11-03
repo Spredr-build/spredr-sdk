@@ -31,7 +31,7 @@ function need(value: string | undefined, name: string): string {
 }
 
 /** A backend linked to one agent. With no options it reads the variables spredr writes into a linked service; give it
- *  the agent's kinds (`new Caller<KindsOf<typeof shop>>()`) and TypeScript checks every name, input and result. */
+ *  the agent's kinds (`new Caller<KindsOf<typeof assistant>>()`) and TypeScript checks every name, input and result. */
 export class Caller<K extends Kinds = AnyKinds> extends Tasks<K> {
   #verify: ((request: Incoming) => boolean) | null;
 

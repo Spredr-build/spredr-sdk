@@ -28,6 +28,8 @@ export interface Task<Result = Json> {
   by: 'owner' | 'caller' | 'schedule' | 'hook' | 'agent' | 'trial' | 'judge';
   key: string | null;
   thread: string | null;
+  /** Whom the agent worked for in it ("" is no one in particular). */
+  tenant: string;
   trial: boolean;
   createdAt: string;
   startedAt: string | null;
@@ -44,6 +46,8 @@ export interface TaskEvent {
 export interface Pause {
   id: string;
   task: string;
+  /** Its task's tenant: whose question it is. */
+  tenant: string;
   action: string;
   question: string;
   options: string[] | null;
@@ -65,6 +69,7 @@ export interface Answer {
 
 export interface Fact {
   id: string;
+  tenant: string;
   scope: string;
   key: string | null;
   text: string;
@@ -89,6 +94,7 @@ export interface AgentInfo {
 
 export interface Freedom {
   action: string;
+  tenant: string;
   level: 'ask' | 'auto';
   earned: boolean;
   neverAuto: boolean;
@@ -101,6 +107,7 @@ export interface Freedom {
 
 export interface Lesson {
   id: string;
+  tenant: string;
   text: string;
   why: string;
   sources: string[];
@@ -134,6 +141,9 @@ export interface AskOptions {
   at?: Date | string;
   /** The conversation it belongs to (a customer, a ticket): tasks with the same thread read as one. */
   thread?: string;
+  /** Whom the agent works for in it (a user, an account, a team, a business): its memory, freedom, lessons and caps are that tenant's.
+   *  A tenant session (`caller.for(tenant)`) sets it for you. */
+  tenant?: string;
 }
 
 /** One step inside a task: a model call, a tool, a memory read. Its trace and its costs come from these. */
@@ -185,4 +195,37 @@ export interface Traces {
   endpoint: string;
   headers: string[];
   withContent: boolean;
+}
+
+/** What one tenant may use, on top of the agent's own caps; null is no cap. */
+export interface TenantLimits {
+  /** Actions it may take alone a day for this tenant; past it, they ask again until tomorrow. */
+  autoPerDay?: number | null;
+  /** Model spend a day for this tenant; past it, its new tasks are refused until tomorrow (the others go on). */
+  spendPerDayUsd?: number | null;
+  /** Facts it may hold of the agent's memory, which all its tenants share. */
+  facts?: number | null;
+}
+
+/** What one tenant used in a while: its tasks and what their model calls cost. */
+export interface TenantUsage {
+  tenant: string;
+  tasks: number;
+  done: number;
+  failed: number;
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  lastAt: string | null;
+}
+
+export interface TenantInfo {
+  tenant: string;
+  /** Its caps as they apply: its own, or every tenant's. */
+  caps: Required<TenantLimits>;
+  ownCaps: boolean;
+  today: TenantUsage;
+  month: TenantUsage;
+  facts: number;
+  openQuestions: number;
 }

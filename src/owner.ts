@@ -1,8 +1,8 @@
 // An owner, with their spredr token: their agents, the backends that may call them, and everything the agents keep.
 
 import { client, query, type Client, type ClientOptions } from './http.ts';
-import { Tasks } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, Thread, Traces } from './types.ts';
+import { Tasks, type Tenant } from './tasks.ts';
+import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
 
 export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
@@ -56,6 +56,21 @@ export class OwnedAgent {
     this.#client = client;
     this.#path = `/agents/${encodeURIComponent(name)}`;
     this.tasks = new Tasks(client, name);
+  }
+
+  /** The agent working for one tenant: its tasks, usage, caps, lessons and freedom, and forgetting it. */
+  for(tenant: string): Tenant {
+    return this.tasks.for(tenant);
+  }
+
+  /** The tenants it worked for in the last `days`, the latest active first, each with what it used. */
+  async tenants(options: { days?: number; limit?: number } = {}): Promise<TenantUsage[]> {
+    return (await this.#client.call<{ tenants: TenantUsage[] }>('GET', `${this.#path}/tenants${query(options)}`)).tenants;
+  }
+
+  /** The caps of every tenant without caps of its own. */
+  async setTenantLimits(limits: TenantLimits): Promise<Required<TenantLimits>> {
+    return (await this.#client.call<{ caps: Required<TenantLimits> }>('PUT', `${this.#path}/tenants/*/limits`, limits)).caps;
   }
 
   async info(): Promise<AgentInfo> {
@@ -129,7 +144,8 @@ export class OwnedAgent {
     return this.#client.call<{ hook: { id: string; name: string }; url: string }>('POST', `${this.#path}/hooks`, { name, kind });
   }
 
-  async memory(options: { scope?: string; q?: string; limit?: number } = {}): Promise<Fact[]> {
+  /** What it remembers; `tenant` narrows it to one tenant's. */
+  async memory(options: { scope?: string; q?: string; limit?: number; tenant?: string } = {}): Promise<Fact[]> {
     return (await this.#client.call<{ facts: Fact[] }>('GET', `${this.#path}/memory${query(options)}`)).facts;
   }
 
@@ -137,11 +153,13 @@ export class OwnedAgent {
     return (await this.#client.call<{ fact: Fact }>('PATCH', `${this.#path}/memory/${id}`, { text, ...(data === undefined ? {} : { data }) })).fact;
   }
 
-  /** Erases everything the agent keeps under a scope (a customer who asks to be forgotten). */
-  async forget(scope: string): Promise<number> {
-    return (await this.#client.call<{ forgotten: number }>('POST', `${this.#path}/memory/forget`, { scope })).forgotten;
+  /** Erases everything the agent keeps under a scope (a customer who asks to be forgotten): the agent's own, or one
+   *  tenant's. */
+  async forget(scope: string, tenant?: string): Promise<number> {
+    return (await this.#client.call<{ forgotten: number }>('POST', `${this.#path}/memory/forget`, { scope, ...(tenant ? { tenant } : {}) })).forgotten;
   }
 
+  /** How free it is with each action in its own work (no tenant); a tenant's is `for(tenant).freedom()`. */
   async freedom(): Promise<Freedom[]> {
     return (await this.#client.call<{ freedom: Freedom[] }>('GET', `${this.#path}/freedom`)).freedom;
   }

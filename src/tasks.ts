@@ -1,24 +1,39 @@
 // What an owner and a backend share: asking an agent for tasks and following them. The backend sees only its own.
+// `for(tenant)` is the same, for one of the many the agent works for at once (a user, an account, a team, a
+// business): every task it asks is that tenant's, and it reads and sets what is that tenant's own (its questions,
+// usage, caps, lessons, freedom).
 
 import { TaskError } from './errors.ts';
 import { query, type Client } from './http.ts';
-import type { Answer, AnyKinds, AskOptions, Feedback, Json, Kinds, Pause, Step, Task, TaskEvent } from './types.ts';
+import type { Answer, AnyKinds, AskOptions, Feedback, Freedom, Json, Kinds, Lesson, Pause, Step, Task, TaskEvent, TenantInfo, TenantLimits } from './types.ts';
 
 const MAX_WAIT_S = 60;
 
 export class Tasks<K extends Kinds = AnyKinds> {
   #client: Client;
   #agent: string;
+  #tenant: string | undefined;
 
-  constructor(client: Client, agent: string) {
+  constructor(client: Client, agent: string, tenant?: string) {
     this.#client = client;
     this.#agent = agent;
+    this.#tenant = tenant;
+  }
+
+  /** The same agent, working for one tenant: `caller.for('user_42').result('reply', …)`. One agent serves any number
+   *  of tenants at once, each with its own memory, questions, freedom, lessons and caps. */
+  for(tenant: string): Tenant<K> {
+    return new Tenant<K>(this.#client, this.#agent, tenant);
   }
 
   /** Asks the agent for a task. With `wait`, answers once it is done (or when the wait runs out). With a `key`, asking
    *  again is the same task, so it is safe to retry. */
   async ask<Name extends keyof K & string>(kind: Name, input: K[Name]['input'], options: AskOptions = {}): Promise<Task<K[Name]['output']>> {
-    const body = { kind, input, ...(options.key ? { key: options.key } : {}), ...(options.wait ? { wait: Math.min(options.wait, MAX_WAIT_S) } : {}), ...(options.at ? { at: new Date(options.at).toISOString() } : {}), ...(options.thread ? { thread: options.thread } : {}) };
+    const tenant = options.tenant ?? this.#tenant;
+    const body = {
+      kind, input, ...(options.key ? { key: options.key } : {}), ...(options.wait ? { wait: Math.min(options.wait, MAX_WAIT_S) } : {}),
+      ...(options.at ? { at: new Date(options.at).toISOString() } : {}), ...(options.thread ? { thread: options.thread } : {}), ...(tenant ? { tenant } : {}),
+    };
     return (await this.#client.call<{ task: Task<K[Name]['output']> }>('POST', `/agents/${encodeURIComponent(this.#agent)}/tasks`, body, { idempotent: Boolean(options.key) })).task;
   }
 
@@ -49,8 +64,9 @@ export class Tasks<K extends Kinds = AnyKinds> {
     return task;
   }
 
-  async list(options: { status?: Task['status']; limit?: number; before?: string; thread?: string } = {}): Promise<Task[]> {
-    return (await this.#client.call<{ tasks: Task[] }>('GET', `/agents/${encodeURIComponent(this.#agent)}/tasks${query(options)}`)).tasks;
+  async list(options: { status?: Task['status']; limit?: number; before?: string; thread?: string; tenant?: string } = {}): Promise<Task[]> {
+    const tenant = options.tenant ?? this.#tenant;
+    return (await this.#client.call<{ tasks: Task[] }>('GET', `/agents/${encodeURIComponent(this.#agent)}/tasks${query({ ...options, tenant })}`)).tasks;
   }
 
   /** What happened to a task after `after` (its events' seq); with `wait` seconds, waits for the first new one. */
@@ -67,9 +83,9 @@ export class Tasks<K extends Kinds = AnyKinds> {
     return (await this.#client.call<{ task: Task }>('POST', `/tasks/${id}/cancel`, {})).task;
   }
 
-  /** The questions waiting for an answer. */
+  /** The questions waiting for an answer (a tenant's alone, in a tenant session). */
   async pauses(): Promise<Pause[]> {
-    return (await this.#client.call<{ pauses: Pause[] }>('GET', `/agents/${encodeURIComponent(this.#agent)}/pauses`)).pauses;
+    return (await this.#client.call<{ pauses: Pause[] }>('GET', `/agents/${encodeURIComponent(this.#agent)}/pauses${query({ tenant: this.#tenant })}`)).pauses;
   }
 
   async answer(pauseId: string, answer: Answer): Promise<Pause> {
@@ -79,5 +95,62 @@ export class Tasks<K extends Kinds = AnyKinds> {
   /** How a finished task went: what the agent learns from. A bad one also takes back what it did alone. */
   async feedback(id: string, verdict: 'good' | 'bad', details: { correction?: Json; note?: string } = {}): Promise<Feedback> {
     return (await this.#client.call<{ feedback: Feedback }>('POST', `/tasks/${id}/feedback`, { verdict, ...details })).feedback;
+  }
+
+  /** The client and agent a tenant session works with. */
+  protected get base(): { client: Client; agent: string } {
+    return { client: this.#client, agent: this.#agent };
+  }
+}
+
+/** One tenant of an agent: its tasks, and what is its own. Made with `caller.for(tenant)` or `spredr.agent(name).for(tenant)`. */
+export class Tenant<K extends Kinds = AnyKinds> extends Tasks<K> {
+  readonly name: string;
+  readonly #path: string;
+
+  constructor(client: Client, agent: string, tenant: string) {
+    super(client, agent, tenant);
+    this.name = tenant;
+    this.#path = `/agents/${encodeURIComponent(agent)}/tenants/${encodeURIComponent(tenant)}`;
+  }
+
+  /** What it used today and this month, its caps, the facts it holds and its open questions. */
+  async usage(): Promise<TenantInfo> {
+    return (await this.base.client.call<{ tenant: TenantInfo }>('GET', this.#path)).tenant;
+  }
+
+  /** Caps this tenant on top of the agent's own; null lifts one. */
+  async setLimits(limits: TenantLimits): Promise<Required<TenantLimits>> {
+    return (await this.base.client.call<{ caps: Required<TenantLimits> }>('PUT', `${this.#path}/limits`, limits)).caps;
+  }
+
+  /** Forgets this tenant whole: its tasks, memory, questions, freedom, lessons and caps. The others stay. */
+  async forget(): Promise<{ tasks: number; facts: number }> {
+    return (await this.base.client.call<{ forgotten: { tasks: number; facts: number } }>('DELETE', this.#path)).forgotten;
+  }
+
+  /** How free the agent is with each action for this tenant. */
+  async freedom(): Promise<Freedom[]> {
+    return (await this.base.client.call<{ freedom: Freedom[] }>('GET', `/agents/${encodeURIComponent(this.base.agent)}/freedom${query({ tenant: this.name })}`)).freedom;
+  }
+
+  /** Lets an action run alone for this tenant (auto), or ask every time (ask): never for another tenant. */
+  async setFreedom(action: string, level: 'ask' | 'auto'): Promise<Freedom> {
+    return (await this.base.client.call<{ freedom: Freedom }>('PUT', `/agents/${encodeURIComponent(this.base.agent)}/freedom/${encodeURIComponent(action)}`, { level, tenant: this.name })).freedom;
+  }
+
+  /** This tenant's lessons: its own rules, in every one of its tasks from the moment they are written. */
+  async lessons(): Promise<Lesson[]> {
+    return (await this.base.client.call<{ lessons: Lesson[] }>('GET', `/agents/${encodeURIComponent(this.base.agent)}/lessons${query({ tenant: this.name })}`)).lessons;
+  }
+
+  /** Teaches the agent a rule for this tenant alone («we never book on Sundays»). */
+  async teach(text: string, why = ''): Promise<Lesson> {
+    return (await this.base.client.call<{ lesson: Lesson }>('POST', `/agents/${encodeURIComponent(this.base.agent)}/lessons`, { text, why, tenant: this.name })).lesson;
+  }
+
+  /** Accepts or refuses a lesson the agent proposed for this tenant, or retires one. */
+  async decide(lessonId: string, decision: 'accept' | 'refuse' | 'retire'): Promise<Lesson> {
+    return (await this.base.client.call<{ lesson: Lesson }>('POST', `/agents/${encodeURIComponent(this.base.agent)}/lessons/${lessonId}`, { decision })).lesson;
   }
 }

@@ -20,6 +20,7 @@
   <a href="#quick-start">Quick start</a> ·
   <a href="#the-agent">The agent</a> ·
   <a href="#your-backend">Your backend</a> ·
+  <a href="#one-agent-many-users-at-once">Many users</a> ·
   <a href="#you-with-your-token">Your token</a> ·
   <a href="#traces">Traces</a> ·
   <a href="https://spredr.cloud/pricing">Pricing</a>
@@ -36,6 +37,9 @@
   and an undo takes that back. `autoPerDay` and `spendPerDayUsd` keep a mistake small.
 - **It remembers, and it learns.** Memory by customer (and forgetting one on request); your corrections become
   lessons, tried on past tasks before they go live.
+- **One agent, thousands of users at once.** Each task says whom it works for (a person, an account, a team, a
+  business), and spredr keeps each one apart: its turn in the line, its memory, what it lets the agent do alone, its
+  own rules and its caps. One busy user never holds the others back; measured with 301 of them and 1,900 tasks at once.
 - **Any model, your key.** Claude, OpenAI, Gemini or a model of your own, called by your code with your key: spredr
   never sits between your agent and its model. `ctx.model()` reads the tokens of Claude, OpenAI and the AI SDK.
 - **Light.** An agent takes about 25 MB idle and 36 MB working, measured with a real Claude agent; an agent asleep
@@ -43,7 +47,7 @@
 - **Yours to watch and to take.** Each task is a trace with its steps, tokens and cost, sent to your
   OpenTelemetry tools (Langfuse, Datadog, Honeycomb); every task exports as NDJSON.
 - **Built to be trusted.** Every request signed, no shared secrets, no dependencies, typed end to end, and tested:
-  55 tests over 99% of the code, plus the SDK against spredr's real agents service on every change there.
+  61 tests over 99% of the code, plus the SDK against spredr's real agents service on every change there.
 
 Agents run as your plan's services, with their tasks included: see [pricing](https://spredr.cloud/pricing).
 
@@ -192,7 +196,8 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | `ctx.trial` | `true` when an old task is replayed to test new lessons: **do nothing real**, just answer. |
 | `ctx.model(() => call)` | A model call, timed and reported with its model and tokens, read from the answer of Claude, OpenAI or the AI SDK. |
 | `ctx.track(kind, name, work, usage?)` | Times any other step (`tool`, `memory`, `other`) and reports it: a charge, an email, a call to your API. Steps are the task's trace, its cost and its timeline. |
-| `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up. |
+| `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up, for the same tenant and thread. |
+| `ctx.tenant`, `ctx.thread` | Whom this task works for (a user, an account, a team, a business; `""` when no one in particular) and its conversation. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
 
 **Nothing happens twice.** When a task comes back (after a question, or given again after a crash), its handler runs
@@ -212,6 +217,18 @@ it answers.
 **Stopping.** On a deploy or a stop, the agent takes no new task and lets the running ones finish, up to
 `shutdownGraceMs` (25 s); `/health` answers 503 meanwhile. A task still running then is given again by spredr. To stop
 it yourself, `await agent.close()`.
+
+**Inside your own server.** An agent can live in a server you already run (Fastify, Express, Hono) instead of
+`listen()`: route its path to `handle()` with the raw body, since the signature is over those bytes, and send back what
+it returns. `start()` says hello; your server's shutdown calls `close()`.
+
+```ts
+app.post(shop.path, async (request, reply) => {   // with the body kept raw for this route
+  const answer = await shop.handle({ method: 'POST', path: request.url, headers: request.headers, body: request.rawBody });
+  return reply.code(answer.status).headers(answer.headers).send(answer.body);
+});
+await shop.start();
+```
 
 ## Your backend
 
@@ -255,6 +272,35 @@ const { reply } = await agent.result('reply', { text: 'hola' });   // reply: str
 **Callbacks.** Link the backend with a `callbackUrl` and spredr POSTs `task.done`, `task.failed`, `task.paused` and
 `task.canceled` to it. Believe one only when `agent.callback({ method, path, headers, body })` returns it, and give it
 the raw body. With `everything: true` the backend receives every task's events, not only its own.
+
+## One agent, many users at once
+
+Most agents serve many people at once: an assistant with thousands of users, a support agent for many accounts, a
+booking agent for many businesses. Each task can say whom it works for, its **tenant**: whatever your app calls one of
+them (a user id, an account, a team, a business). Open a session for one with `for(tenant)`:
+
+```ts
+const user = agent.for('user_42');   // agent is your Caller
+
+const { reply } = await user.result('reply', { text: 'remind me to call mom on Friday' }, { thread: 'chat_9' });
+```
+
+spredr keeps each tenant apart, with nothing for your agent to remember:
+
+| | |
+|---|---|
+| **Its turn** | The line goes in turns between tenants: one with a thousand tasks waiting never holds the others back. |
+| **Its memory** | `ctx.memory` in a task reaches that tenant's facts alone, whatever the model is talked into. All tenants share the agent's room; `setLimits({ facts })` caps one's share. |
+| **Its freedom** | `user.setFreedom('send_email', 'auto')` lets the agent act alone for this tenant, never for another. |
+| **Its rules** | `user.teach('Call me Ana, never by my surname')` reaches this tenant's tasks from that moment on, and no other's. |
+| **Its caps** | `user.setLimits({ spendPerDayUsd: 0.5, autoPerDay: 20 })`: past them it waits for tomorrow, and the rest go on. |
+| **Its questions** | `user.pauses()`, and every `task.paused` callback names the tenant, so it reaches the right person. |
+| **What it used** | `user.usage()`: tasks, cost and tokens, today and this month, to bill or limit each one for what it used. |
+| **Forgetting it** | `user.forget()` erases its tasks, memory, questions, freedom, rules and caps. The others stay. |
+
+In the agent, `ctx.tenant` says whom the task works for. With your token, `spredr.agent('assistant').tenants()` lists
+them with what each used, and `setTenantLimits()` caps every tenant without caps of its own. A task with no tenant is
+the agent's own work, as before.
 
 ## You, with your token
 

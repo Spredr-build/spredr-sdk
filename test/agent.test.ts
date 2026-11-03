@@ -132,9 +132,10 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
   const calls = ai.seen.filter((one) => one.path !== '/agent/hello' && !one.path.endsWith('/result') && !one.path.endsWith('/steps')).map((one) => [one.method, one.path, one.json]);
   assert.deepEqual(calls, [
     ['POST', '/agent/tasks/tsk_1/progress', { attempt: 1, data: { step: 'looking' } }],
-    ['PUT', '/agent/memory', { scope: 'customer:ana', text: 'Asked about Sunday', key: 'last' }],
-    ['GET', '/agent/memory?scope=customer%3Aana&q=sunday', undefined],
-    ['DELETE', '/agent/memory/ft_9', undefined],
+    // every memory call names its task: ai takes the tenant from it
+    ['PUT', '/agent/memory', { task: 'tsk_1', scope: 'customer:ana', text: 'Asked about Sunday', key: 'last' }],
+    ['GET', '/agent/memory?scope=customer%3Aana&q=sunday&task=tsk_1', undefined],
+    ['DELETE', '/agent/memory/ft_9?task=tsk_1', undefined],
     ['POST', '/agent/tasks', { kind: 'follow-up', input: { customer: 'ana' }, at: '2026-12-01T09:00:00.000Z', key: 'ana-follow' }],
   ]);
   // the note, then remember and later as steps carrying their memo, so the next run does neither again

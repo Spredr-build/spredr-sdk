@@ -67,19 +67,19 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const claude = new Anthropic(); // ANTHROPIC_API_KEY, set with: spredr vars set shop-agent ANTHROPIC_API_KEY=…
 
-new Agent({ description: 'Answers the shop\'s customers', sleepAfterMinutes: 15 })
-  .on('reply', async (input, ctx) => {
-    const { text } = input as { text: string };
-    const message = await ctx.track('model', 'reply', () => claude.messages.create({
+export const shop = new Agent({ description: 'Answers the shop\'s customers', sleepAfterMinutes: 15 })
+  .on('reply', async ({ text }: { text: string }, ctx) => {
+    const message = await ctx.model(() => claude.messages.create({   // timed, model and tokens reported for you
       model: 'claude-haiku-5-5',
       max_tokens: 400,
       system: ['You answer for a small shop. Be brief.', ...ctx.lessons].join('\n'),
       messages: [{ role: 'user', content: text }],
-    }), (answer) => ({ model: answer.model, tokensIn: answer.usage.input_tokens, tokensOut: answer.usage.output_tokens }));
+    }));
     const answer = message.content.find((block) => block.type === 'text');
     return { reply: answer?.type === 'text' ? answer.text : '' };
-  })
-  .listen(); // PORT, 8080 by default
+  });
+
+shop.listen(); // PORT, 8080 by default
 ```
 
 **3. Deploy it and make it an agent**
@@ -110,9 +110,7 @@ await new Spredr().agent('shop').addCaller('shop-api', { service: 'shop-api' });
 // in shop-api: the variables are already there
 import { Caller } from '@spredr/sdk';
 
-const shop = Caller.fromEnv();
-const task = await shop.run('reply', { text: 'Are you open on Sunday?' });
-console.log(task.result); // { reply: '…' }
+const { reply } = await new Caller().result('reply', { text: 'Are you open on Sunday?' });
 ```
 
 That is the whole loop. Everything below is reference.
@@ -129,8 +127,7 @@ new Agent({
   sleepAfterMinutes: 15,
   concurrency: 4,
 })
-  .on('reply', async (input, ctx) => {
-    const { customer, text, wantsRefund } = input as { customer: string; text: string; wantsRefund?: boolean };
+  .on('reply', async ({ customer, text, wantsRefund }: { customer: string; text: string; wantsRefund?: boolean }, ctx) => {
     const known = await ctx.memory.recall({ scope: `customer:${customer}` });
     if (wantsRefund) {
       const answer = await ctx.ask('refund', `Refund ${customer}?`);
@@ -142,8 +139,17 @@ new Agent({
   .listen();
 ```
 
-Each task kind gets a handler. **What it returns is the task's result, and what it throws is its error.** `ctx` gives
-it the rest:
+Each task kind gets a handler. **What it returns is the task's result, and what it throws is its error.** To check
+the input before the handler runs, give `on()` a schema: zod, valibot, arktype or any
+[Standard Schema](https://standardschema.dev). A task whose input does not match fails, saying where.
+
+```ts
+import { z } from 'zod';
+
+agent.on('reply', z.object({ text: z.string().min(1) }), async ({ text }, ctx) => ({ reply: text }));
+```
+
+`ctx` gives the handler the rest:
 
 | | |
 |---|---|
@@ -151,7 +157,8 @@ it the rest:
 | `ctx.memory` | `remember(scope, text)`, `recall({ scope, q })`, `forget(id)`. A scope is whatever groups facts, such as `customer:ana`. |
 | `ctx.lessons` | The lessons you approved. Put them in your prompt. |
 | `ctx.trial` | `true` when an old task is replayed to test new lessons: **do nothing real**, just answer. |
-| `ctx.track(kind, name, work, usage?)` | Times a step (`model`, `tool`, `memory`, `other`) and reports it. For a model call, read the tokens from its answer. Steps are the task's trace, its cost and its timeline. |
+| `ctx.model(() => call)` | A model call, timed and reported with its model and tokens, read from the answer of Claude, OpenAI or the AI SDK. |
+| `ctx.track(kind, name, work, usage?)` | Times any other step (`tool`, `memory`, `other`) and reports it. Steps are the task's trace, its cost and its timeline. |
 | `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
 
@@ -162,12 +169,15 @@ tasks (`ctx.trial`).
 **Sleeping.** An agent that is quiet for `sleepAfterMinutes` is put to sleep and uses no CPU. The next task wakes it, and waits until
 it answers.
 
+**Stopping.** On a deploy or a stop, the agent takes no new task and lets the running ones finish, up to
+`shutdownGraceMs` (25 s). A task still running then is given again by spredr.
+
 ## Your backend
 
 ```ts
 import { Caller } from '@spredr/sdk';
 
-const agent = Caller.fromEnv();
+const agent = new Caller();   // reads the variables spredr wrote into this service
 
 const task = await agent.run('reply', { customer: 'ana', text: 'hola' }, { key: messageId, thread: 'customer:ana' });
 
@@ -181,7 +191,8 @@ await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });   // k
 
 | | |
 |---|---|
-| `run(kind, input)` | Asks and waits for the outcome. |
+| `result(kind, input)` | Asks, waits, and gives back the result. A task that fails, is canceled or waits for an answer throws a `TaskError` carrying it. |
+| `run(kind, input)` | Asks and waits for the outcome, whatever it is. |
 | `ask(kind, input)` | Asks and returns at once. `settle(id)` waits for it later. |
 | `key` | Your own id for the task: asking twice with the same key is the same task, never two. |
 | `thread` | Tasks with the same thread read as one conversation. |
@@ -189,6 +200,16 @@ await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });   // k
 | `list()`, `events(id)`, `steps(id)`, `cancel(id)` | Follow and stop tasks. |
 | `pauses()`, `answer(id, answer)` | The questions the agent is waiting on. |
 | `feedback(id, 'good' \| 'bad', { correction })` | Your verdict, with what it should have done. |
+
+**Types, end to end.** Give the backend your agent's type and TypeScript checks each kind's name, input and result:
+
+```ts
+import type { shop } from '../shop-agent/index.ts';
+import { Caller, type KindsOf } from '@spredr/sdk';
+
+const agent = new Caller<KindsOf<typeof shop>>();
+const { reply } = await agent.result('reply', { text: 'hola' });   // reply: string
+```
 
 **Callbacks.** Link the backend with a `callbackUrl` and spredr POSTs `task.done`, `task.failed`, `task.paused` and
 `task.canceled` to it. Believe one only when `agent.callback({ method, path, headers, body })` returns it, and give it
@@ -238,6 +259,24 @@ await new Spredr().agent('shop').setTraces({
 The headers are sealed by spredr and never shown back. The task's input and result travel only with
 `withContent: true`.
 
+## Errors and retries
+
+Every error is a `SpredrError`, with ai's own words, its `status` and its `trace`. Catch the base, or the case you
+handle: `BadRequestError` (400), `AuthenticationError` (401), `PermissionDeniedError` (403), `NotFoundError` (404),
+`ConflictError` (409), `RateLimitError` (429, with `retryAfter`), `InternalServerError` (5xx), `ConnectionError` and
+`TimeoutError` (no answer). A task that ends badly is a `TaskError`.
+
+A request is tried again only when that is safe: no answer came or spredr failed, on a call that does the same thing
+twice (reads, updates, deletes, and a task asked with its own `key`). A 429 is tried again only when spredr says how
+long to wait, so a cap reached comes straight back to you. Each side takes the same options:
+
+| Option | Default | |
+|---|---|---|
+| `timeoutMs` | 75 000 | how long one request may take |
+| `maxRetries` | 2 | how many more tries, when safe; 0 never |
+| `retryDelayMs` | 500 | the first wait, doubling up to 8 s |
+| `fetch` | the global one | a fetch of your own |
+
 ## Variables
 
 spredr writes these into your services when you register an agent or link a backend. You only set `SPREDR_TOKEN`.
@@ -245,7 +284,7 @@ spredr writes these into your services when you register an agent or link a back
 | Variable | Read by | What it is |
 |---|---|---|
 | `SPREDR_AGENT_ID`, `SPREDR_AGENT_KEY` | `Agent` | the agent's id and private key |
-| `SPREDR_CALLER_ID`, `SPREDR_CALLER_KEY`, `SPREDR_AGENT` | `Caller.fromEnv()` | the backend's id, its private key, the agent it calls |
+| `SPREDR_CALLER_ID`, `SPREDR_CALLER_KEY`, `SPREDR_AGENT` | `new Caller()` | the backend's id, its private key, the agent it calls |
 | `SPREDR_AI_URL`, `SPREDR_AI_KEY` | `Agent`, `Caller` | where spredr's agents live, and its public key |
 | `SPREDR_TOKEN` | `Spredr` | an API token of yours, made in the panel (Account › API tokens) |
 | `PORT` | `Agent.listen()` | the port it listens on, 8080 by default |

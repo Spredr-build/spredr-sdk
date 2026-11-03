@@ -1,15 +1,14 @@
 // An owner, with their spredr token: their agents, the backends that may call them, and everything the agents keep.
 
-import { client, query, type Client } from './http.ts';
+import { client, query, type Client, type ClientOptions } from './http.ts';
 import { Tasks } from './tasks.ts';
 import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, Thread, Traces } from './types.ts';
 
-export interface SpredrOptions {
+export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
   token?: string;
   /** Where ai is; SPREDR_AI_URL, or spredr's own. */
   ai?: string;
-  fetch?: typeof fetch;
 }
 
 export const DEFAULT_AI_URL = 'https://api.spredr.cloud/ai';
@@ -18,9 +17,10 @@ export class Spredr {
   #client: Client;
 
   constructor(options: SpredrOptions = {}) {
-    const token = options.token || process.env.SPREDR_TOKEN;
+    const { token: given, ai, ...clientOptions } = options;
+    const token = given || process.env.SPREDR_TOKEN;
     if (!token) throw new Error('SPREDR_TOKEN is not set: make an API token in the panel (Account › API tokens), or pass { token }.');
-    this.#client = client(options.ai || process.env.SPREDR_AI_URL || DEFAULT_AI_URL, { token }, options.fetch);
+    this.#client = client(ai || process.env.SPREDR_AI_URL || DEFAULT_AI_URL, { token }, clientOptions);
   }
 
   async agents(): Promise<AgentInfo[]> {

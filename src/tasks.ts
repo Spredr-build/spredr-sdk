@@ -1,11 +1,12 @@
 // What an owner and a backend share: asking an agent for tasks and following them. The backend sees only its own.
 
+import { TaskError } from './errors.ts';
 import { query, type Client } from './http.ts';
-import type { Answer, AskOptions, Feedback, Json, Pause, Step, Task, TaskEvent } from './types.ts';
+import type { Answer, AnyKinds, AskOptions, Feedback, Json, Kinds, Pause, Step, Task, TaskEvent } from './types.ts';
 
 const MAX_WAIT_S = 60;
 
-export class Tasks {
+export class Tasks<K extends Kinds = AnyKinds> {
   #client: Client;
   #agent: string;
 
@@ -14,16 +15,26 @@ export class Tasks {
     this.#agent = agent;
   }
 
-  /** Asks the agent for a task. With `wait`, answers once it is done (or when the wait runs out). */
-  async ask<Result = Json>(kind: string, input: Json, options: AskOptions = {}): Promise<Task<Result>> {
+  /** Asks the agent for a task. With `wait`, answers once it is done (or when the wait runs out). With a `key`, asking
+   *  again is the same task, so it is safe to retry. */
+  async ask<Name extends keyof K & string>(kind: Name, input: K[Name]['input'], options: AskOptions = {}): Promise<Task<K[Name]['output']>> {
     const body = { kind, input, ...(options.key ? { key: options.key } : {}), ...(options.wait ? { wait: Math.min(options.wait, MAX_WAIT_S) } : {}), ...(options.at ? { at: new Date(options.at).toISOString() } : {}), ...(options.thread ? { thread: options.thread } : {}) };
-    return (await this.#client.call<{ task: Task<Result> }>('POST', `/agents/${encodeURIComponent(this.#agent)}/tasks`, body)).task;
+    return (await this.#client.call<{ task: Task<K[Name]['output']> }>('POST', `/agents/${encodeURIComponent(this.#agent)}/tasks`, body, { idempotent: Boolean(options.key) })).task;
   }
 
   /** Asks and waits until the task is done, failed, canceled or paused, however long (in rounds of up to a minute). */
-  async run<Result = Json>(kind: string, input: Json, options: Omit<AskOptions, 'wait'> & { timeoutMs?: number } = {}): Promise<Task<Result>> {
-    const task = await this.ask<Result>(kind, input, { ...options, wait: MAX_WAIT_S });
-    return this.settle(task.id, options.timeoutMs);
+  async run<Name extends keyof K & string>(kind: Name, input: K[Name]['input'], options: Omit<AskOptions, 'wait'> & { timeoutMs?: number } = {}): Promise<Task<K[Name]['output']>> {
+    const task = await this.ask(kind, input, { ...options, wait: MAX_WAIT_S });
+    return this.settle<K[Name]['output']>(task.id, options.timeoutMs);
+  }
+
+  /** Asks, waits, and gives back the result itself; a task that fails, is canceled or waits for an answer throws a
+   *  TaskError carrying the task. */
+  async result<Name extends keyof K & string>(kind: Name, input: K[Name]['input'], options: Omit<AskOptions, 'wait'> & { timeoutMs?: number } = {}): Promise<K[Name]['output']> {
+    const task = await this.run(kind, input, options);
+    if (task.status !== 'done') throw new TaskError(task);
+    // a done task holds what its handler returned
+    return task.result as K[Name]['output'];
   }
 
   async get<Result = Json>(id: string, wait = 0): Promise<Task<Result>> {

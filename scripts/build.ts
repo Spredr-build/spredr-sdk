@@ -11,7 +11,7 @@ const HERE = fileURLToPath(new URL('..', import.meta.url));
 const DIST = `${HERE}dist`;
 rmSync(DIST, { recursive: true, force: true });
 
-await build({ entryPoints: [`${HERE}src/index.ts`], outfile: `${DIST}/index.js`, bundle: true, format: 'esm', platform: 'node', target: 'node20', legalComments: 'none' });
+await build({ entryPoints: [`${HERE}src/index.ts`], outfile: `${DIST}/index.js`, bundle: true, format: 'esm', platform: 'node', target: 'node22', legalComments: 'none' });
 
 const config = `${HERE}tsconfig.types.json`;
 writeFileSync(config, JSON.stringify({

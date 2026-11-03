@@ -4,6 +4,18 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 
 export type TaskStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
 
+/** One kind of task: what goes in, what comes out. */
+export interface Kind {
+  input: unknown;
+  output: unknown;
+}
+
+/** An agent's kinds by name. Name none and any kind goes: JSON in, and a result as free as fetch's json(); take them
+ *  from the agent (KindsOf) and TypeScript checks each name, its input and its result. */
+export type Kinds = { [name: string]: Kind };
+// `any` on purpose: the untyped result, the way fetch's json() is; KindsOf types it exactly
+export type AnyKinds = { [name: string]: { input: Json; output: any } };
+
 export interface Task<Result = Json> {
   id: string;
   agent: string;

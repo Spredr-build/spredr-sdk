@@ -15,13 +15,15 @@
   ],
   "homepage": "https://spredr.cloud",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",
   "files": [
@@ -38,11 +40,14 @@
     "build": "node scripts/build.ts",
     "check": "tsc --noEmit -p . && node scripts/check-alone.ts",
     "test": "node --test 'test/*.test.ts'",
-    "prepublishOnly": "node scripts/check-readme.ts && npm run check && npm run build && npm test"
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**' --test-coverage-lines=95 --test-coverage-branches=85 --test-coverage-functions=90 'test/*.test.ts'",
+    "package": "npm run build && publint --strict && node scripts/check-package.ts",
+    "prepublishOnly": "node scripts/check-readme.ts && npm run check && npm run coverage && npm run package"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "esbuild": "0.28.2",
+    "publint": "^0.3.14",
     "typescript": "5.9.3"
   }
 }

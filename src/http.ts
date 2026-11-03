@@ -1,60 +1,134 @@
-// Calling ai: signed (an agent or a backend) or with a spredr token (an owner). Errors carry ai's own words.
+// Calling ai: signed (an agent or a backend) or with a spredr token (an owner). Errors carry ai's own words, as the class
+// of their case (errors.ts). A request is tried again only when that is safe: no answer came or ai failed, on a method
+// that does the same thing twice (GET, PUT, DELETE, or a POST the caller marks idempotent), and a 429 only when ai said
+// how long to wait. Each try is signed anew: a signature is good once.
 
 import type { KeyObject } from 'node:crypto';
+import { ConnectionError, errorFor, SpredrError, TimeoutError } from './errors.ts';
 import { signedHeaders } from './sign.ts';
 
-export class SpredrError extends Error {
-  status: number;
-  trace: string;
-
-  constructor(status: number, message: string, trace: string) {
-    super(message);
-    this.name = 'SpredrError';
-    this.status = status;
-    this.trace = trace;
-  }
-}
+export { SpredrError } from './errors.ts';
 
 export type Auth = { token: string } | { from: string; key: KeyObject };
+export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** How every side talks to ai. */
+export interface ClientOptions {
+  /** A fetch of your own (a proxy, a test). */
+  fetch?: typeof fetch;
+  /** How long one request may take, in ms: 75 s by default, since a wait for a task is up to 60 s. */
+  timeoutMs?: number;
+  /** How many more times a request is tried when that is safe: 2 by default; 0 never. */
+  maxRetries?: number;
+  /** The first wait before trying again, in ms, doubling each time (up to 8 s): 500 by default. */
+  retryDelayMs?: number;
+}
+
+export interface CallOptions {
+  /** Whether sending it twice does the same as once. By default GET, PUT and DELETE do; a POST that carries its own key
+   *  says true, a PUT that adds something each time says false. */
+  idempotent?: boolean;
+}
 
 export interface Client {
-  call<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T>;
+  call<T = unknown>(method: Method, path: string, body?: unknown, options?: CallOptions): Promise<T>;
   /** The answer as text (an export, one JSON per line). */
   text(method: 'GET', path: string): Promise<string>;
 }
 
 const TIMEOUT_MS = 75_000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 500;
+const MAX_DELAY_MS = 8_000;
+/** The longest Retry-After worth waiting for in place; past it, the RateLimitError goes to the caller. */
+const MAX_RETRY_AFTER_S = 60;
+const REPEATABLE = new Set<Method>(['GET', 'PUT', 'DELETE']);
 
-export function client(base: string, auth: Auth, fetcher: typeof fetch = fetch): Client {
+const fieldOf = (parsed: unknown, name: string): string =>
+  typeof parsed === 'object' && parsed !== null && name in parsed && typeof (parsed as Record<string, unknown>)[name] === 'string' ? String((parsed as Record<string, unknown>)[name]) : '';
+
+function parseJson(raw: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: raw ? JSON.parse(raw) : null };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function retryAfterOf(response: Response): number | null {
+  const header = response.headers.get('retry-after');
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds);
+  const at = Date.parse(header);
+  return Number.isFinite(at) ? Math.max(0, (at - Date.now()) / 1000) : null;
+}
+
+/** The error for an answer that is not ok, whatever its body is (ai's JSON, a proxy's page, nothing). */
+async function failureOf(response: Response): Promise<SpredrError> {
+  const raw = await response.text();
+  const parsed = parseJson(raw);
+  const message = (parsed.ok ? fieldOf(parsed.value, 'error') : '') || raw.slice(0, 300).trim() || `HTTP ${response.status}`;
+  return errorFor(response.status, message, parsed.ok ? fieldOf(parsed.value, 'trace') : '', retryAfterOf(response));
+}
+
+export function client(base: string, auth: Auth, options: ClientOptions = {}): Client {
   const root = base.replace(/\/+$/, '');
-  const headersFor = (method: string, path: string, text: string, json: boolean): Record<string, string> => {
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
+  const maxRetries = Math.max(0, options.maxRetries ?? MAX_RETRIES);
+  const firstDelay = options.retryDelayMs ?? RETRY_DELAY_MS;
+
+  const headersFor = (method: Method, path: string, text: string, json: boolean): Record<string, string> => {
     const headers: Record<string, string> = { accept: json ? 'application/json' : '*/*', ...(text ? { 'content-type': 'application/json' } : {}) };
     if ('token' in auth) headers.authorization = `Bearer ${auth.token}`;
     else Object.assign(headers, signedHeaders(auth.from, auth.key, method, path, text));
     return headers;
   };
+
+  const waitBefore = (tryNumber: number, retryAfter: number | null): Promise<void> => {
+    const backoff = Math.min(MAX_DELAY_MS, firstDelay * 2 ** tryNumber) * (0.75 + Math.random() * 0.5);
+    return new Promise((resolve) => setTimeout(resolve, retryAfter === null ? backoff : retryAfter * 1000));
+  };
+
+  /** Sends until there is an answer worth giving back: ok, or a failure that trying again would not change. */
+  async function send(method: Method, path: string, text: string, json: boolean, repeatable: boolean): Promise<Response> {
+    for (let tryNumber = 0; ; tryNumber++) {
+      const last = tryNumber >= maxRetries;
+      let response: Response;
+      try {
+        response = await fetcher(`${root}${path}`, { method, headers: headersFor(method, path, text, json), ...(text ? { body: text } : {}), signal: AbortSignal.timeout(timeoutMs) });
+      } catch (error) {
+        const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        if (!repeatable || last) {
+          throw timedOut ? new TimeoutError(0, `ai did not answer in ${timeoutMs} ms (${method} ${path}).`) : new ConnectionError(0, `ai could not be reached (${method} ${path}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+        await waitBefore(tryNumber, null);
+        continue;
+      }
+      if (response.ok || last) return response;
+      const retryAfter = retryAfterOf(response);
+      const again = response.status === 429 ? retryAfter !== null && retryAfter <= MAX_RETRY_AFTER_S : repeatable && (response.status === 408 || response.status >= 500);
+      if (!again) return response;
+      await response.body?.cancel();
+      await waitBefore(tryNumber, retryAfter);
+    }
+  }
+
   return {
     async text(method, path) {
-      const response = await fetcher(`${root}${path}`, { method, headers: headersFor(method, path, '', false), signal: AbortSignal.timeout(TIMEOUT_MS) });
-      const raw = await response.text();
-      if (!response.ok) throw new SpredrError(response.status, raw.slice(0, 300) || `HTTP ${response.status}`, '');
-      return raw;
+      const response = await send(method, path, '', false, true);
+      if (!response.ok) throw await failureOf(response);
+      return response.text();
     },
-    async call(method, path, body) {
+    async call(method, path, body, callOptions = {}) {
       const text = body === undefined ? '' : JSON.stringify(body);
-      const headers: Record<string, string> = { accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) };
-      if ('token' in auth) headers.authorization = `Bearer ${auth.token}`;
-      else Object.assign(headers, signedHeaders(auth.from, auth.key, method, path, text));
-      const response = await fetcher(`${root}${path}`, { method, headers, ...(body === undefined ? {} : { body: text }), signal: AbortSignal.timeout(TIMEOUT_MS) });
-      const raw = await response.text();
-      const parsed: unknown = raw ? JSON.parse(raw) : null;
-      if (!response.ok) {
-        const error = typeof parsed === 'object' && parsed !== null && 'error' in parsed && typeof parsed.error === 'string' ? parsed.error : `HTTP ${response.status}`;
-        const trace = typeof parsed === 'object' && parsed !== null && 'trace' in parsed && typeof parsed.trace === 'string' ? parsed.trace : '';
-        throw new SpredrError(response.status, error, trace);
-      }
+      const response = await send(method, path, text, true, callOptions.idempotent ?? REPEATABLE.has(method));
+      if (!response.ok) throw await failureOf(response);
+      const parsed = parseJson(await response.text());
+      if (!parsed.ok) throw new SpredrError(response.status, `ai answered ${method} ${path} with something that is not JSON.`);
       // the answer is ai's own JSON: its shape is the type the caller named
-      return parsed as never;
+      return parsed.value as never;
     },
   };
 }

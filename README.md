@@ -38,7 +38,7 @@ three parties around it talk to each other.
 | **You** | `Spredr` | register agents, link backends, schedule work, read memory, approve lessons, set limits |
 
 <p align="center">
-  <img src="https://spredr.cloud/branding/sdk/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
+  <img src="assets/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
 </p>
 
 **No shared secrets.** Every request is signed with ed25519, and each side keeps only the other's public key. When you
@@ -264,7 +264,7 @@ dependencies; write to us if you need the protocol for another language.
 ---
 
 <p align="center">
-  <a href="https://spredr.cloud"><img src="https://spredr.cloud/branding/logo/spredr-mark-512.png" alt="spredr" width="40"></a><br>
+  <a href="https://spredr.cloud"><img src="https://spredr.cloud/branding/icon/icon-192.png" alt="spredr" width="56"></a><br>
   <sub><a href="https://spredr.cloud">spredr.cloud</a> · © 2026 Candhrly, LLC · <a href="LICENSE">license</a></sub><br>
   <sub>Free to use with spredr. spredr and its logo are trademarks of Candhrly, LLC.</sub>
 </p>

@@ -38,7 +38,7 @@
     "build": "node scripts/build.ts",
     "check": "tsc --noEmit -p . && node scripts/check-alone.ts",
     "test": "node --test 'test/*.test.ts'",
-    "prepublishOnly": "npm run check && npm run build && npm test"
+    "prepublishOnly": "node scripts/check-readme.ts && npm run check && npm run build && npm test"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

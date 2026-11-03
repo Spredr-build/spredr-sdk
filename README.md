@@ -72,6 +72,19 @@ await spredr.agent('shop').setLimits({ autoPerDay: 200, spendPerDayUsd: 15 });
 await spredr.inbox();                                        // what waits for you across every agent
 ```
 
+## Traces, to your own tools
+
+Every finished task can go to your OpenTelemetry endpoint as a trace: the task as the root span, each step as a child
+with the GenAI attributes (`gen_ai.*`) that Langfuse, Datadog, Honeycomb and Grafana read. The key in `headers` is sealed
+by spredr and never shown back; the task's input and result travel only with `withContent: true`.
+
+```ts
+await spredr.agent('storio').setTraces({
+  endpoint: 'https://cloud.langfuse.com/api/public/otel/v1/traces',
+  headers: { authorization: `Basic ${btoa(`${publicKey}:${secretKey}`)}` },
+});
+```
+
 ## Without the SDK
 
 The protocol is plain HTTP and works from any language. See `ai/README.md` in spredr for the contract, and

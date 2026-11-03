@@ -167,3 +167,10 @@ export interface Limits {
   /** What its model calls may cost in a day (from the steps it reports); past it, new tasks wait. null: no limit. */
   spendPerDayUsd?: number | null;
 }
+
+/** Where an agent's traces go: an OTLP/HTTP endpoint and the names of its headers (their values never come back). */
+export interface Traces {
+  endpoint: string;
+  headers: string[];
+  withContent: boolean;
+}

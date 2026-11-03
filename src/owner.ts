@@ -2,7 +2,7 @@
 
 import { client, query, type Client } from './http.ts';
 import { Tasks } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, Thread } from './types.ts';
+import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, Thread, Traces } from './types.ts';
 
 export interface SpredrOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`. */
@@ -78,6 +78,21 @@ export class OwnedAgent {
 
   async setLimits(limits: Limits): Promise<AgentInfo> {
     return (await this.#client.call<{ agent: AgentInfo }>('PUT', `${this.#path}/limits`, limits)).agent;
+  }
+
+  /** Sends each finished task to your OpenTelemetry endpoint (OTLP/HTTP: Langfuse, Datadog, Honeycomb, your collector)
+   *  as a trace. headers carry its key (sealed by ai, never shown back); withContent sends the input and result too. */
+  async setTraces(traces: { endpoint: string; headers?: Record<string, string>; withContent?: boolean }): Promise<Traces> {
+    return (await this.#client.call<{ traces: Traces }>('PUT', `${this.#path}/traces`, traces)).traces;
+  }
+
+  /** Where its traces go (the header names only), or null. */
+  async traces(): Promise<Traces | null> {
+    return (await this.#client.call<{ traces: Traces | null }>('GET', `${this.#path}/traces`)).traces;
+  }
+
+  async stopTraces(): Promise<void> {
+    await this.#client.call('DELETE', `${this.#path}/traces`);
   }
 
   async remove(): Promise<void> {

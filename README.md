@@ -37,14 +37,9 @@ three parties around it talk to each other.
 | **Your backend** | `Caller` | give the agent tasks, follow them, answer its questions, receive callbacks |
 | **You** | `Spredr` | register agents, link backends, schedule work, read memory, approve lessons, set limits |
 
-```text
-  your backend ──── task ────▶ spredr ──── task ────▶ your agent
-   (Caller)    ◀─ result ───    (ai)   ◀─ result ───   (Agent)
-                                  ▲
-                                  │  questions, memory, lessons, limits
-                                  │
-                               you (Spredr)
-```
+<p align="center">
+  <img src="https://spredr.cloud/branding/sdk/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
+</p>
 
 **No shared secrets.** Every request is signed with ed25519, and each side keeps only the other's public key. When you
 register an agent or link a backend, spredr writes the keys into that service's variables for you: there is nothing to

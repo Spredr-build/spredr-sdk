@@ -25,7 +25,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "publishConfig": {
@@ -33,7 +34,13 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
-    "test": "node --test test/sdk.test.ts",
-    "prepublishOnly": "npm run build && npm test"
+    "check": "tsc --noEmit -p . && node scripts/check-alone.ts",
+    "test": "node --test 'test/*.test.ts'",
+    "prepublishOnly": "npm run check && npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
   }
 }

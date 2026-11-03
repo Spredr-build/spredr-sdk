@@ -9,14 +9,17 @@ already covers the day it opens.
 ## Proposing a change
 
 1. Open an issue first for anything bigger than a small fix, so we can agree on the shape before you write it.
-2. Keep the SDK dependency free: `src/` imports only `node:` built-ins and its own files.
-3. Run, and keep green:
+2. Keep the SDK dependency free: `src/` imports only `node:` built-ins and its own files. Keep its API typed end to end:
+   no `any` beyond the untyped result, and a type test in `test/types.check.ts` for anything a user's types lean on.
+3. Add a test for what you change: a fix comes with the test that failed before it. Then run, and keep green:
    ```sh
    npm install
-   npm run check   # types, and that the SDK stands alone
-   npm test
-   npm run build
+   npm run check      # types (test/types.check.ts included), and that the SDK stands alone
+   npm test           # every test, against a fake ai and a real agent on a free port
+   npm run coverage   # the same, failing under 95% of lines, 85% of branches, 90% of functions
+   npm run package    # the packed SDK, installed and compiled as a user gets it (publint, nodenext, bundler)
    ```
+   Node 22.12 or newer. `prepublishOnly` runs all of it before a version leaves.
 4. Open a pull request, and tick the agreement box in its description (below).
 
 ## Contributor License Agreement

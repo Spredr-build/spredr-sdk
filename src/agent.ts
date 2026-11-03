@@ -6,6 +6,7 @@
 
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { contextFor, PAUSED, type Context, type Delivery } from './context.ts';
+import { ConflictError } from './errors.ts';
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { validated, type InferInput, type InferOutput, type StandardSchemaV1 } from './schema.ts';
 import { aiVerifier, privateKeyOf } from './sign.ts';
@@ -189,15 +190,23 @@ export class Agent<K extends Kinds = {}> {
     const beatMs = Math.max(5_000, ((this.#manifest.timeoutSeconds ?? 120) * 1000) / 3);
     // the server keeps the process alive while it listens; a beat alone never does (a task past the grace is ai's again)
     const beat = setInterval(() => void this.#client.call('POST', `${path}/progress`, { attempt: task.attempt, data: { alive: true } }).catch(() => undefined), beatMs).unref();
+    let outcome: { result: unknown } | { error: string };
     try {
-      const result = await handler(task.input, contextFor(this.#client, delivery));
-      await this.#client.call('POST', `${path}/result`, { attempt: task.attempt, result: result ?? null });
+      outcome = { result: (await handler(task.input, contextFor(this.#client, delivery))) ?? null };
     } catch (error) {
       if (error === PAUSED) return;
       const message = error instanceof Error ? error.message : String(error);
-      await this.#client.call('POST', `${path}/result`, { attempt: task.attempt, error: message.slice(0, 2_000) || 'failed' }).catch((reportError: unknown) => this.#log(`could not report ${task.id}: ${String(reportError)}`));
+      outcome = { error: message.slice(0, 2_000) || 'failed' };
     } finally {
       clearInterval(beat);
+    }
+    // ai closes an attempt once, so sending it again is safe, and a 409 says it was closed already. A result that cannot
+    // be sent is never turned into a failure: ai gives the task again when its lease ends.
+    try {
+      await this.#client.call('POST', `${path}/result`, { attempt: task.attempt, ...outcome }, { idempotent: true });
+    } catch (error) {
+      if (error instanceof ConflictError) return;
+      this.#log(`could not report ${task.id}: ${error instanceof Error ? error.message : String(error)}; ai gives it again when its lease ends`);
     }
   }
 

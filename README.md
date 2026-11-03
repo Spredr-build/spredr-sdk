@@ -41,6 +41,9 @@ three parties around it talk to each other.
   <img src="assets/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
 </p>
 
+**Requirements.** Node 22.12 or newer, and nothing else: the SDK has no dependencies. It is written in TypeScript and
+ships its types.
+
 **No shared secrets.** Every request is signed with ed25519, and each side keeps only the other's public key. When you
 register an agent or link a backend, spredr writes the keys into that service's variables for you: there is nothing to
 copy or paste.
@@ -149,6 +152,15 @@ import { z } from 'zod';
 agent.on('reply', z.object({ text: z.string().min(1) }), async ({ text }, ctx) => ({ reply: text }));
 ```
 
+The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `sleepAfterMinutes`, `concurrency`,
+`timeoutSeconds`, `judge`) and the shared ones under [Errors and retries](#errors-and-retries):
+
+| Option | Default | |
+|---|---|---|
+| `shutdownGraceMs` | 25 000 | on a stop, how long running tasks may finish |
+| `log` | the console | where its lines go; `false` says nothing |
+| `id`, `key`, `ai`, `aiKey` | its variables | written by spredr when it registers the agent |
+
 `ctx` gives the handler the rest:
 
 | | |
@@ -170,7 +182,8 @@ tasks (`ctx.trial`).
 it answers.
 
 **Stopping.** On a deploy or a stop, the agent takes no new task and lets the running ones finish, up to
-`shutdownGraceMs` (25 s). A task still running then is given again by spredr.
+`shutdownGraceMs` (25 s); `/health` answers 503 meanwhile. A task still running then is given again by spredr. To stop
+it yourself, `await agent.close()`.
 
 ## Your backend
 

@@ -1,21 +1,33 @@
-MIT License
+spredr SDK License
 
-Copyright (c) 2026 spredr
+Copyright (c) 2026 Candhrly, LLC. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license covers @spredr/sdk («the SDK»): the code in this package and in its repository. Candhrly, LLC («we»)
+owns the SDK. It is not open source.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. What you may do. We grant you a worldwide, non-exclusive, royalty-free license to install, run and copy the SDK,
+   and to adapt it as far as your own software needs, only to use spredr's services (spredr.cloud). You may
+   distribute the SDK only as part of your own software that uses spredr, with this license and the copyright notice
+   kept.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. What you may not do. You may not:
+   a. distribute the SDK on its own, or publish a modified version or a fork of it;
+   b. use the SDK, or any part of it, to reach a service other than spredr, or to build a service that competes with
+      spredr;
+   c. remove or change this license, the copyright notice or the trademark notice.
+
+3. Ownership and trademarks. We keep every right we do not grant here. The spredr name and logo are trademarks of
+   Candhrly, LLC and are not licensed by this file (see TRADEMARKS.md).
+
+4. Ending. This license ends at once if you break its terms. When it ends, you stop using and distributing the SDK.
+
+5. Future versions. We may publish later versions of the SDK under an open-source license. A version keeps the
+   license it was published with.
+
+6. No warranty. THE SDK IS PROVIDED «AS IS», WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+   LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+7. Limit of liability. IN NO EVENT SHALL CANDHRLY, LLC BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+   AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SDK OR ITS USE.
+
+Your use of spredr's services is also governed by spredr's terms of service.

@@ -13,7 +13,6 @@
   <a href="https://www.npmjs.com/package/@spredr/sdk"><img src="https://img.shields.io/npm/v/@spredr/sdk?color=C2410C&label=npm" alt="npm version"></a>
   <img src="https://img.shields.io/badge/dependencies-0-14161C" alt="no dependencies">
   <img src="https://img.shields.io/badge/node-%E2%89%A520-14161C" alt="Node 20 or newer">
-  <img src="https://img.shields.io/badge/license-MIT-14161C" alt="MIT license">
 </p>
 
 <p align="center">
@@ -265,11 +264,12 @@ See [spredr.cloud/pricing](https://spredr.cloud/pricing).
 ## Without the SDK
 
 It is plain HTTP and works from any language: signed requests one way, signed callbacks the other. The SDK has no
-dependencies and is small enough to read in one sitting; its source is the reference.
+dependencies; write to us if you need the protocol for another language.
 
 ---
 
 <p align="center">
   <a href="https://spredr.cloud"><img src="https://spredr.cloud/branding/logo/spredr-mark-512.png" alt="spredr" width="40"></a><br>
-  <sub>MIT · <a href="https://spredr.cloud">spredr.cloud</a></sub>
+  <sub><a href="https://spredr.cloud">spredr.cloud</a> · © 2026 Candhrly, LLC · <a href="LICENSE">license</a></sub><br>
+  <sub>Free to use with spredr. spredr and its logo are trademarks of Candhrly, LLC.</sub>
 </p>

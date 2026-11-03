@@ -162,3 +162,21 @@ test('the owner exports every task with its steps through the SDK', async (t) =>
   assert.equal(rows[0]?.id, done.id);
   assert.equal(rows[0]?.steps.length, 1);
 });
+
+test('by default an owner reaches ai under api.spredr.cloud/ai, and a base with a path keeps it on every call', async () => {
+  const asked: string[] = [];
+  const fetcher: typeof fetch = async (url) => {
+    asked.push(String(url));
+    return new Response(JSON.stringify({ agents: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const before = process.env.SPREDR_AI_URL;
+  process.env.SPREDR_AI_URL = '';
+  try {
+    await new Spredr({ token: TOKEN, fetch: fetcher }).agents();
+  } finally {
+    if (before === undefined) delete process.env.SPREDR_AI_URL;
+    else process.env.SPREDR_AI_URL = before;
+  }
+  await new Spredr({ token: TOKEN, ai: 'https://api.spredr.cloud/ai/', fetch: fetcher }).agents();
+  assert.deepEqual(asked, ['https://api.spredr.cloud/ai/agents', 'https://api.spredr.cloud/ai/agents'], 'the same host as the panel\'s session (decision 0014); an empty SPREDR_AI_URL, as a .env leaves it, is no address');
+});

@@ -12,13 +12,13 @@ export interface SpredrOptions {
   fetch?: typeof fetch;
 }
 
-export const DEFAULT_AI_URL = 'https://ai.spredr.cloud';
+export const DEFAULT_AI_URL = 'https://api.spredr.cloud/ai';
 
 export class Spredr {
   #client: Client;
 
   constructor(options: SpredrOptions) {
-    this.#client = client(options.ai ?? process.env.SPREDR_AI_URL ?? DEFAULT_AI_URL, { token: options.token }, options.fetch);
+    this.#client = client(options.ai || process.env.SPREDR_AI_URL || DEFAULT_AI_URL, { token: options.token }, options.fetch);
   }
 
   async agents(): Promise<AgentInfo[]> {

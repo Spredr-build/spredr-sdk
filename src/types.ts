@@ -164,7 +164,7 @@ export interface Thread {
 export interface Limits {
   /** Actions it may take alone in a day; past it, its free actions ask again. null: no limit. */
   autoPerDay?: number | null;
-  /** What its model calls may cost in a day (from the steps it reports); past it, new tasks wait. null: no limit. */
+  /** What its model calls may cost in a day (from the steps it reports); past it, new tasks are refused until tomorrow. null: no limit. */
   spendPerDayUsd?: number | null;
 }
 

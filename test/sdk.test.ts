@@ -163,7 +163,7 @@ test('the owner exports every task with its steps through the SDK', async (t) =>
   assert.equal(rows[0]?.steps.length, 1);
 });
 
-test('by default an owner reaches ai under api.spredr.cloud/ai, and a base with a path keeps it on every call', async () => {
+test('by default an owner reaches ai under api.spredr.cloud/ai with SPREDR_TOKEN, and a base with a path keeps it on every call', async () => {
   const asked: string[] = [];
   const fetcher: typeof fetch = async (url) => {
     asked.push(String(url));
@@ -178,5 +178,15 @@ test('by default an owner reaches ai under api.spredr.cloud/ai, and a base with 
     else process.env.SPREDR_AI_URL = before;
   }
   await new Spredr({ token: TOKEN, ai: 'https://api.spredr.cloud/ai/', fetch: fetcher }).agents();
-  assert.deepEqual(asked, ['https://api.spredr.cloud/ai/agents', 'https://api.spredr.cloud/ai/agents'], 'the same host as the panel\'s session (decision 0014); an empty SPREDR_AI_URL, as a .env leaves it, is no address');
+  const token = process.env.SPREDR_TOKEN;
+  try {
+    delete process.env.SPREDR_TOKEN;
+    assert.throws(() => new Spredr({ fetch: fetcher }), /SPREDR_TOKEN is not set/, 'no token: said at once, not as a 401 later');
+    process.env.SPREDR_TOKEN = TOKEN;
+    await new Spredr({ fetch: fetcher }).agents();
+  } finally {
+    if (token === undefined) delete process.env.SPREDR_TOKEN;
+    else process.env.SPREDR_TOKEN = token;
+  }
+  assert.deepEqual(asked, ['https://api.spredr.cloud/ai/agents', 'https://api.spredr.cloud/ai/agents', 'https://api.spredr.cloud/ai/agents'], 'the same host as the panel\'s session (decision 0014); an empty SPREDR_AI_URL, as a .env leaves it, is no address');
 });

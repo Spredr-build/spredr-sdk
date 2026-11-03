@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="#why-spredr-for-your-agents">Why</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#the-agent">The agent</a> ·
   <a href="#your-backend">Your backend</a> ·
@@ -25,6 +26,26 @@
 </p>
 
 ---
+
+## Why spredr for your agents
+
+- **Nothing happens twice.** When a task comes back (after a question, or after a crash), every answer and every
+  step it already took gives back what it gave: the model is not paid twice, a customer is not charged twice. No
+  «write it to run twice» rule.
+- **It asks before it acts.** A risky action waits for a person; approved often enough, it is offered to run alone,
+  and an undo takes that back. `autoPerDay` and `spendPerDayUsd` keep a mistake small.
+- **It remembers, and it learns.** Memory by customer (and forgetting one on request); your corrections become
+  lessons, tried on past tasks before they go live.
+- **Any model, your key.** Claude, OpenAI, Gemini or a model of your own, called by your code with your key: spredr
+  never sits between your agent and its model. `ctx.model()` reads the tokens of Claude, OpenAI and the AI SDK.
+- **Light.** An agent takes about 25 MB idle and 36 MB working, measured with a real Claude agent; an agent asleep
+  uses no CPU, and spredr adds about 10 ms of its own CPU per task.
+- **Yours to watch and to take.** Each task is a trace with its steps, tokens and cost, sent to your
+  OpenTelemetry tools (Langfuse, Datadog, Honeycomb); every task exports as NDJSON.
+- **Built to be trusted.** Every request signed, no shared secrets, no dependencies, typed end to end, and tested:
+  55 tests over 99% of the code, plus the SDK against spredr's real agents service on every change there.
+
+Agents run as your plan's services, with their tasks included: see [pricing](https://spredr.cloud/pricing).
 
 ## Three pieces, one agent
 

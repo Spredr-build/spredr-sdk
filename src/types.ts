@@ -1,0 +1,169 @@
+// What ai answers with, as the SDK hands it back.
+
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
+export type TaskStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
+
+export interface Task<Result = Json> {
+  id: string;
+  agent: string;
+  kind: string;
+  status: TaskStatus;
+  input: Json;
+  result: Result | null;
+  error: string;
+  attempt: number;
+  by: 'owner' | 'caller' | 'schedule' | 'hook' | 'agent' | 'trial' | 'judge';
+  key: string | null;
+  thread: string | null;
+  trial: boolean;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface TaskEvent {
+  seq: number;
+  type: string;
+  at: string;
+  data: Json;
+}
+
+export interface Pause {
+  id: string;
+  task: string;
+  action: string;
+  question: string;
+  options: string[] | null;
+  data: Json;
+  status: 'open' | 'answered' | 'canceled';
+  answer: Answer | null;
+  answeredBy: string;
+  auto: boolean;
+  createdAt: string;
+  answeredAt: string | null;
+}
+
+export interface Answer {
+  yes: boolean;
+  /** What to do instead, when the person changed it. */
+  value?: Json;
+  note?: string;
+}
+
+export interface Fact {
+  id: string;
+  scope: string;
+  key: string | null;
+  text: string;
+  data: Json;
+  updatedAt: string;
+}
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  service: string;
+  url: string;
+  state: 'new' | 'awake' | 'waking' | 'asleep';
+  description: string;
+  tasks: { kind: string; description: string }[];
+  actions: { name: string; neverAuto: boolean }[];
+  sleepAfterMinutes: number | null;
+  lessonsVersion: number;
+  tools?: { name: string; description: string; asks: boolean }[];
+  limits?: Limits;
+}
+
+export interface Freedom {
+  action: string;
+  level: 'ask' | 'auto';
+  earned: boolean;
+  neverAuto: boolean;
+  streak: number;
+  approved: number;
+  edited: number;
+  rejected: number;
+  undone: number;
+}
+
+export interface Lesson {
+  id: string;
+  text: string;
+  why: string;
+  sources: string[];
+  by: string;
+  status: 'proposed' | 'accepted' | 'refused' | 'retired';
+}
+
+export interface LessonVersion {
+  version: number;
+  lessons: string[];
+  status: 'trial' | 'live' | 'superseded' | 'failed' | 'discarded';
+  trial: { total: number; done: number; passed: number };
+}
+
+export interface Feedback {
+  seq: number;
+  task: string;
+  verdict: 'good' | 'bad';
+  correction: Json;
+  note: string;
+  by: string;
+  at: string;
+}
+
+export interface AskOptions {
+  /** Your own key for this task: asking twice with the same key is the same task. */
+  key?: string;
+  /** Seconds to wait for the outcome (up to 60). */
+  wait?: number;
+  /** When to start (a Date or ISO time); absent: now. */
+  at?: Date | string;
+  /** The conversation it belongs to (a customer, a ticket): tasks with the same thread read as one. */
+  thread?: string;
+}
+
+/** One step inside a task: a model call, a tool, a memory read. Its trace and its costs come from these. */
+export interface Step {
+  kind: 'model' | 'tool' | 'memory' | 'other';
+  name: string;
+  ms: number;
+  at?: number;
+  detail?: string;
+  model?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  costUsd?: number;
+  ok?: boolean;
+}
+
+export interface Summary {
+  hours: number;
+  tasks: number;
+  done: number;
+  failed: number;
+  failRate: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  tokens: number;
+  costUsd: number;
+  perHour: number[];
+  failedPerHour: number[];
+  tools: { name: string; uses: number }[];
+  freedom: { alone: number; asked: number; undone: number };
+}
+
+export interface Thread {
+  thread: string;
+  tasks: number;
+  lastAt: string;
+  lastTask: string;
+}
+
+export interface Limits {
+  /** Actions it may take alone in a day; past it, its free actions ask again. null: no limit. */
+  autoPerDay?: number | null;
+  /** What its model calls may cost in a day (from the steps it reports); past it, new tasks wait. null: no limit. */
+  spendPerDayUsd?: number | null;
+}

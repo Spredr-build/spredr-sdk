@@ -1,0 +1,39 @@
+{
+  "name": "@spredr/sdk",
+  "version": "0.1.0",
+  "description": "Talk to agents on spredr: run an agent, give it tasks from your backend, and manage it with your token. No dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "spredr",
+    "agents",
+    "ai-agents",
+    "tasks",
+    "sdk",
+    "ed25519"
+  ],
+  "homepage": "https://spredr.cloud",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "test": "node --test test/sdk.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  }
+}

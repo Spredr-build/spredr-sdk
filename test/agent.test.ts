@@ -129,14 +129,20 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
   });
   await give(delivery('reply', {}));
   assert.equal((await resultOf(ai)).result, 1);
-  const calls = ai.seen.filter((one) => one.path !== '/agent/hello' && !one.path.endsWith('/result')).map((one) => [one.method, one.path, one.json]);
+  const calls = ai.seen.filter((one) => one.path !== '/agent/hello' && !one.path.endsWith('/result') && !one.path.endsWith('/steps')).map((one) => [one.method, one.path, one.json]);
   assert.deepEqual(calls, [
     ['POST', '/agent/tasks/tsk_1/progress', { attempt: 1, data: { step: 'looking' } }],
-    ['POST', '/agent/tasks/tsk_1/steps', { attempt: 1, steps: [{ kind: 'other', name: 'note', ms: 1 }] }],
     ['PUT', '/agent/memory', { scope: 'customer:ana', text: 'Asked about Sunday', key: 'last' }],
     ['GET', '/agent/memory?scope=customer%3Aana&q=sunday', undefined],
     ['DELETE', '/agent/memory/ft_9', undefined],
     ['POST', '/agent/tasks', { kind: 'follow-up', input: { customer: 'ana' }, at: '2026-12-01T09:00:00.000Z', key: 'ana-follow' }],
+  ]);
+  // the note, then remember and later as steps carrying their memo, so the next run does neither again
+  const steps = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').map((one) => (one.json as { steps: { kind: string; name: string; memo?: { key: string; value?: unknown } }[] }).steps[0]);
+  assert.deepEqual(steps.map((step) => [step?.kind, step?.name, step?.memo]), [
+    ['other', 'note', undefined],
+    ['memory', 'remember', { key: 'memory:remember:customer:ana', value: { id: 'ft_1' } }],
+    ['other', 'later follow-up', { key: 'other:later:follow-up' }],
   ]);
 });
 

@@ -58,10 +58,12 @@ export async function deliver(server: Server, aiPrivateKey: string, delivery: ob
 }
 
 /** A delivery as ai sends it. */
-export function delivery(kind: string, input: unknown, extra: { id?: string; resume?: object | null; lessons?: string[]; trial?: boolean } = {}) {
+export function delivery(kind: string, input: unknown, extra: { id?: string; resume?: object | null; answers?: object[]; memo?: object[]; lessons?: string[]; trial?: boolean } = {}) {
   return {
     task: { id: extra.id ?? 'tsk_1', kind, input, attempt: 1, by: 'caller', trial: extra.trial ?? false, judges: null, createdAt: new Date().toISOString() },
     resume: extra.resume ?? null,
+    ...(extra.answers ? { answers: extra.answers } : {}),
+    ...(extra.memo ? { memo: extra.memo } : {}),
     lessons: { version: 1, items: extra.lessons ?? [] },
   };
 }

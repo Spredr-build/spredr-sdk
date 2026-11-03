@@ -165,14 +165,21 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 
 | | |
 |---|---|
-| `ctx.ask(action, question)` | Asks a person first. The task stops here, and when someone answers it comes back with the answer and the handler runs again **from the top**: write it so running twice is safe. An action marked `neverAuto` asks every time. |
+| `ctx.ask(action, question)` | Asks a person first, and stops the task until someone answers. An action marked `neverAuto` asks every time. |
 | `ctx.memory` | `remember(scope, text)`, `recall({ scope, q })`, `forget(id)`. A scope is whatever groups facts, such as `customer:ana`. |
 | `ctx.lessons` | The lessons you approved. Put them in your prompt. |
 | `ctx.trial` | `true` when an old task is replayed to test new lessons: **do nothing real**, just answer. |
 | `ctx.model(() => call)` | A model call, timed and reported with its model and tokens, read from the answer of Claude, OpenAI or the AI SDK. |
-| `ctx.track(kind, name, work, usage?)` | Times any other step (`tool`, `memory`, `other`) and reports it. Steps are the task's trace, its cost and its timeline. |
+| `ctx.track(kind, name, work, usage?)` | Times any other step (`tool`, `memory`, `other`) and reports it: a charge, an email, a call to your API. Steps are the task's trace, its cost and its timeline. |
 | `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
+
+**Nothing happens twice.** When a task comes back (after a question, or given again after a crash), its handler runs
+from the top, but everything it already did through `ctx` gives back what it gave the first time instead of happening
+again: each answered question, each `ctx.model`, `ctx.track`, `ctx.memory.remember` and `ctx.later`. The model is not
+paid twice and a customer is not charged twice. So put side effects in `ctx.track`; only code outside `ctx` runs again.
+If the handler takes another way than before (another question, another step), it runs for real from there on. What a
+step gives back comes back as JSON (a `Date` comes back as its text), up to 256 KB; a bigger one simply runs again.
 
 **Learning.** The agent reads the verdicts on its tasks with `agent.feedback()` and turns what it sees into a lesson
 with `agent.propose(text, why)`. A lesson goes live only when you approve it, and before that it can be tried on old

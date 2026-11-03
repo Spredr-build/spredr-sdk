@@ -147,3 +147,71 @@ test('a result is sent again when ai failed; one ai already has is fine; one tha
   assert.equal(lines.filter((line) => line.includes('tsk_2')).length, 0);
   assert.match(lines.find((line) => line.includes('tsk_3')) ?? '', /ai gives it again/);
 });
+
+test('coming back with its journal, a task asked A then B gets both answers and asks nothing again: no loop', async (t) => {
+  const { ai, give } = await running(t, (agent) => agent.on('refunds', async (_, ctx) => {
+    const refund = await ctx.ask('refund', 'Refund ana?');
+    const notify = await ctx.ask('notify', 'Tell luis?');
+    return { refund: refund.yes, notify: notify.yes };
+  }));
+  await give(delivery('refunds', {}, { answers: [{ pause: 'pz_1', action: 'refund', yes: true }, { pause: 'pz_2', action: 'notify', yes: false }] }));
+  assert.deepEqual((await resultOf(ai)).result, { refund: true, notify: false });
+  assert.equal(ai.last('/agent/tasks/tsk_1/pause'), undefined);
+});
+
+test('a finished step is not done again: it gives back what it gave, and is not reported twice', async (t) => {
+  let calls = 0;
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => {
+    const message = await ctx.model(async () => { calls += 1; return { model: 'claude-haiku-5-5', usage: { input_tokens: 1, output_tokens: 1 }, text: 'fresh' }; });
+    const charged = await ctx.track('tool', 'stripe.charge', async () => { calls += 1; return { id: 'ch_new' }; });
+    const answer = await ctx.ask('refund', 'Refund?');
+    return { text: message.text, charge: charged.id, yes: answer.yes };
+  }));
+  await give(delivery('reply', {}, {
+    answers: [{ pause: 'pz_1', action: 'refund', yes: true }],
+    memo: [{ key: 'model:', has: true, value: { model: 'claude-haiku-5-5', text: 'from the first run' } }, { key: 'tool:stripe.charge', has: true, value: { id: 'ch_first' } }],
+  }));
+  assert.deepEqual((await resultOf(ai)).result, { text: 'from the first run', charge: 'ch_first', yes: true });
+  assert.equal(calls, 0, 'neither the model nor the charge ran again');
+  assert.equal(ai.last('/agent/tasks/tsk_1/steps'), undefined, 'nothing reported twice');
+});
+
+test('when the handler takes another way, the journal stops there and the rest runs for real', async (t) => {
+  const ran: string[] = [];
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => {
+    await ctx.track('tool', 'first', async () => { ran.push('first'); return 1; });
+    await ctx.track('tool', 'other', async () => { ran.push('other'); return 2; });
+    await ctx.track('tool', 'third', async () => { ran.push('third'); return 3; });
+    return ran;
+  }));
+  await give(delivery('reply', {}, { memo: [{ key: 'tool:first', has: true, value: 1 }, { key: 'tool:second', has: true, value: 2 }, { key: 'tool:third', has: true, value: 3 }] }));
+  assert.deepEqual((await resultOf(ai)).result, ['other', 'third'], 'first replayed; at «other» the way changed, so third runs too');
+});
+
+test('a question about another action than the one answered asks for real', async (t) => {
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => ({ answer: await ctx.ask('notify', 'Tell luis?') })),
+    (request) => (request.path.endsWith('/pause') ? { body: { pause: { status: 'open', answer: null } } } : undefined));
+  await give(delivery('reply', {}, { answers: [{ pause: 'pz_1', action: 'refund', yes: true }] }));
+  assert.equal((await until(() => ai.last('/agent/tasks/tsk_1/pause'))).json && (ai.last('/agent/tasks/tsk_1/pause')?.json as { action: string }).action, 'notify');
+});
+
+test('what a step gives back travels as JSON; too big or not JSON, the step keeps no memo and runs again next time', async (t) => {
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => {
+    await ctx.track('tool', 'nothing', async () => undefined);
+    await ctx.track('tool', 'big', async () => 'x'.repeat(300 * 1024));
+    await ctx.track('tool', 'circular', async () => { const loop: { self?: unknown } = {}; loop.self = loop; return loop; });
+    return 'ok';
+  }));
+  await give(delivery('reply', {}));
+  await resultOf(ai);
+  const memos = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').map((one) => (one.json as { steps: { name: string; memo?: unknown }[] }).steps[0]).map((step) => [step?.name, step?.memo]);
+  assert.deepEqual(memos, [['nothing', { key: 'tool:nothing' }], ['big', undefined], ['circular', undefined]]);
+});
+
+test('a step that gave back nothing gives back nothing again', async (t) => {
+  let ran = false;
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => ({ was: await ctx.track('tool', 'send', async () => { ran = true; }) ?? 'nothing' })));
+  await give(delivery('reply', {}, { memo: [{ key: 'tool:send', has: false, value: null }] }));
+  assert.deepEqual((await resultOf(ai)).result, { was: 'nothing' });
+  assert.equal(ran, false);
+});

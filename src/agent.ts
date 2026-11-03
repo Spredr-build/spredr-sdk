@@ -1,7 +1,8 @@
 // The agent side: say hello, take tasks, report. Each task is answered at once with 202 and its handler runs after,
 // with a heartbeat so a long task keeps its place; whatever it returns is its result, whatever it throws its error.
-// ctx.ask() stops the task to ask before acting: the task comes back later with the answer and the handler runs again
-// from the top, so a handler is written to be run again (remember what is done, check before doing it twice).
+// ctx.ask() stops the task to ask before acting: the task comes back later and the handler runs again from the top, with
+// the task's journal (context.ts), so every question already answered and every ctx step already done gives back what it
+// gave instead of happening again. Only code outside ctx runs twice: side effects go in ctx.track.
 // On SIGTERM (a deploy, a stop) it takes no new task and lets the running ones finish, up to shutdownGraceMs.
 
 import { createServer, type IncomingMessage, type Server } from 'node:http';

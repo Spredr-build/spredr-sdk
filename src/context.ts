@@ -38,6 +38,11 @@ export interface Context {
    *  again when the task runs again, it gives back the same answer without asking. */
   ask(action: string, question: string, extra?: { options?: string[]; data?: Json }): Promise<Answer>;
   progress(data: Json): Promise<void>;
+  /** The next piece of its answer, for whoever watches the task live (the caller's stream()): sent in order, a few at a
+   *  time. A view, never the outcome: what the task returns is its result, and the pieces go once it is done. */
+  stream(text: string): void;
+  /** Sends what stream() still holds: done for you before the task's result. */
+  flush(): Promise<void>;
   /** Reports one step it took (a model call, a tool): its trace and its costs come from these. */
   step(step: Step): Promise<void>;
   /** Runs `work`, times it, and reports it as a step (failed when it throws). Tokens and cost from what it returns, if
@@ -83,11 +88,30 @@ function memoOf(value: unknown): { value?: Json } | undefined {
   }
 }
 
+/** How long live text gathers before it is sent, and how much makes it go at once. */
+const STREAM_FLUSH_MS = 150;
+const STREAM_FLUSH_CHARS = 2_000;
+
 export function contextFor(client: Client, delivery: Delivery): Context {
   const { task } = delivery;
   const call = client.call.bind(client);
   const began = Date.now();
   const path = `/agent/tasks/${task.id}`;
+  // the live text: gathered, and sent one piece after another, so they arrive in the order written
+  let pending = '';
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  let sending: Promise<void> = Promise.resolve();
+  const flushNow = (): Promise<void> => {
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = null;
+    if (pending) {
+      const text = pending;
+      pending = '';
+      // a piece that cannot be sent is lost from the live view only: the result still says all of it
+      sending = sending.then(() => call('POST', `${path}/delta`, { attempt: task.attempt, text })).then(() => undefined, () => undefined);
+    }
+    return sending;
+  };
   const report = (step: Step & { memo?: { key: string; value?: Json } }): Promise<unknown> => call('POST', `${path}/steps`, { attempt: task.attempt, steps: [step] }).catch(() => undefined);
 
   // The journal: what the task already lived. Each ask and each step takes the next entry while the handler does what
@@ -141,6 +165,13 @@ export function contextFor(client: Client, delivery: Delivery): Context {
       if (pause.status === 'answered' && pause.answer) return pause.answer;
       throw PAUSED;
     },
+    stream(text) {
+      if (!text) return;
+      pending += text;
+      if (pending.length >= STREAM_FLUSH_CHARS) void flushNow();
+      else if (!flushTimer) flushTimer = setTimeout(() => void flushNow(), STREAM_FLUSH_MS);
+    },
+    flush: () => flushNow(),
     async progress(data) {
       await call('POST', `${path}/progress`, { attempt: task.attempt, data });
     },

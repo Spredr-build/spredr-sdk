@@ -5,7 +5,7 @@
 
 import { TaskError } from './errors.ts';
 import { query, type Client } from './http.ts';
-import type { Answer, AnyKinds, AskOptions, Feedback, Freedom, Json, Kinds, Lesson, Pause, SessionFile, Step, Task, TaskEvent, TenantInfo, TenantLimits } from './types.ts';
+import type { Answer, AnyKinds, AskOptions, Feedback, Freedom, Json, Kinds, Lesson, Pause, SessionFile, Step, StreamEvent, Task, TaskEvent, TenantInfo, TenantLimits } from './types.ts';
 
 const MAX_WAIT_S = 60;
 
@@ -95,6 +95,33 @@ export class Tasks<K extends Kinds = AnyKinds> {
   /** How a finished task went: what the agent learns from. A bad one also takes back what it did alone. */
   async feedback(id: string, verdict: 'good' | 'bad', details: { correction?: Json; note?: string } = {}): Promise<Feedback> {
     return (await this.#client.call<{ feedback: Feedback }>('POST', `/tasks/${id}/feedback`, { verdict, ...details })).feedback;
+  }
+
+  /** A task as it happens: each piece of its live answer (the agent's ctx.stream), each of its other events, and last the
+   *  task itself once it is done, paused or failed. A stream that closes before the end is opened again after what
+   *  was seen, so nothing comes twice. */
+  async *stream(id: string): AsyncGenerator<StreamEvent> {
+    let after = 0;
+    for (;;) {
+      for await (const sent of this.#client.events(`/tasks/${encodeURIComponent(id)}/stream`, after)) {
+        // ai's own JSON, on our own signed request: its shape is ai's
+        const parsed: unknown = JSON.parse(sent.data);
+        if (sent.event === 'task') {
+          yield { type: 'end', task: parsed as Task };
+          return;
+        }
+        after = sent.id || after;
+        const event = parsed as TaskEvent;
+        const text = typeof event.data === 'object' && event.data !== null && !Array.isArray(event.data) && typeof event.data.text === 'string' ? event.data.text : '';
+        yield sent.event === 'delta' ? { type: 'delta', text, seq: event.seq } : { type: 'event', event };
+      }
+    }
+  }
+
+  /** Asks for a task and gives its live answer as it is written: the pieces, then the task. */
+  async *live<Name extends keyof K & string>(kind: Name, input: K[Name]['input'], options: AskOptions = {}): AsyncGenerator<StreamEvent> {
+    const task = await this.ask(kind, input, { ...options, wait: 0 });
+    yield* this.stream(task.id);
   }
 
   /** Leaves a file in a session (a thread) for the agent's code to read: a price list, a catalogue, a document. Every

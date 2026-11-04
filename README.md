@@ -201,6 +201,7 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up, for the same tenant and thread. |
 | `ctx.tenant`, `ctx.thread` | Whom this task works for (a user, an account, a team, a business; `""` when no one in particular) and its conversation. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
+| `ctx.stream(text)` | The next piece of its answer, for a caller watching live (`live()` or `stream(id)`). Sent in order, a few at a time, and the last pieces before its result. A view: the result is what stays. |
 
 **Nothing happens twice.** When a task comes back (after a question, or given again after a crash), its handler runs
 from the top, but everything it already did through `ctx` gives back what it gave the first time instead of happening
@@ -274,6 +275,7 @@ await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });   // k
 | `list()`, `events(id)`, `steps(id)`, `cancel(id)` | Follow and stop tasks. |
 | `pauses()`, `answer(id, answer)` | The questions the agent is waiting on. |
 | `feedback(id, 'good' \| 'bad', { correction })` | Your verdict, with what it should have done. |
+| `live(kind, input)`, `stream(id)` | The task as it happens: each piece of its live answer (`{ type: 'delta', text }`), its other events, and last `{ type: 'end', task }`. A stream that closes early is opened again after what was seen. |
 | `attach(thread, name, data, { type })`, `files(thread)`, `detach(thread, name)` | Leaves a file in a session for the agent to read in its tasks (a price list, a catalogue, a document): sent once, every task of that thread lists it. The same name again replaces it. Up to 10 MB each; they go with the agent's record's days. |
 
 **Types, end to end.** Give the backend your agent's type and TypeScript checks each kind's name, input and result:

@@ -215,7 +215,13 @@ export class Agent<K extends Kinds = {}> {
     const started = Date.now();
     try {
       // everything the handler does, however deep, knows which task it is working on (tag.ts)
-      outcome = { result: (await asTask(task.id, () => handler(task.input, contextFor(this.#client, delivery)))) ?? null };
+      const ctx = contextFor(this.#client, delivery);
+      try {
+        outcome = { result: (await asTask(task.id, () => handler(task.input, ctx))) ?? null };
+      } finally {
+        // the last pieces of its live text go before its result (or its error, or its question)
+        await ctx.flush();
+      }
     } catch (error) {
       if (error === PAUSED) {
         this.#log(`${task.id} ${task.kind} waits for an answer`);

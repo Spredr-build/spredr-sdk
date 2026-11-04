@@ -38,7 +38,13 @@ export interface Client {
   upload<T = unknown>(path: string, data: Uint8Array, headers: Record<string, string>): Promise<T>;
   /** Bytes back as they are, with their type (a session's file). */
   download(path: string): Promise<{ data: Uint8Array; type: string; headers: Headers }>;
+  /** Server-sent events from a GET that stays open, one after another, after the event `lastId` (Last-Event-ID). Ends
+   *  when the server closes it. */
+  events(path: string, lastId: number): AsyncGenerator<{ id: number; event: string; data: string }>;
 }
+
+/** How long one stream of events may stay open before it is opened again (the server closes it before that). */
+const STREAM_TIMEOUT_MS = 11 * 60_000;
 
 const TIMEOUT_MS = 75_000;
 const MAX_RETRIES = 2;
@@ -96,12 +102,12 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
   };
 
   /** Sends until there is an answer worth giving back: ok, or a failure that trying again would not change. */
-  async function send(method: Method, path: string, text: string | Uint8Array, json: boolean, repeatable: boolean, extra: Record<string, string> = {}): Promise<Response> {
+  async function send(method: Method, path: string, text: string | Uint8Array, json: boolean, repeatable: boolean, extra: Record<string, string> = {}, waitMs = timeoutMs): Promise<Response> {
     for (let tryNumber = 0; ; tryNumber++) {
       const last = tryNumber >= maxRetries;
       let response: Response;
       try {
-        response = await fetcher(`${root}${path}`, { method, headers: { ...headersFor(method, path, text, json), ...extra }, ...(text.length ? { body: typeof text === 'string' ? text : new Uint8Array(text) } : {}), signal: AbortSignal.timeout(timeoutMs) });
+        response = await fetcher(`${root}${path}`, { method, headers: { ...headersFor(method, path, text, json), ...extra }, ...(text.length ? { body: typeof text === 'string' ? text : new Uint8Array(text) } : {}), signal: AbortSignal.timeout(waitMs) });
       } catch (error) {
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
         if (!repeatable || last) {
@@ -141,6 +147,27 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
       const parsed = parseJson(await response.text());
       if (!parsed.ok) throw new SpredrError(response.status, `ai answered PUT ${path} with something that is not JSON.`);
       return parsed.value as never;
+    },
+    async *events(path, lastId) {
+      const response = await send('GET', path, '', false, true, { accept: 'text/event-stream', ...(lastId ? { 'last-event-id': String(lastId) } : {}) }, STREAM_TIMEOUT_MS);
+      if (!response.ok) throw await failureOf(response);
+      if (!response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buffered += decoder.decode(value, { stream: true });
+        // one event per blank line: its id, its name and its data; a line starting with «:» only keeps it open
+        for (let end = buffered.indexOf('\n\n'); end >= 0; end = buffered.indexOf('\n\n')) {
+          const block = buffered.slice(0, end);
+          buffered = buffered.slice(end + 2);
+          const field = (name: string) => block.split('\n').filter((line) => line.startsWith(`${name}:`)).map((line) => line.slice(name.length + 1).trimStart()).join('\n');
+          const data = field('data');
+          if (data) yield { id: Number(field('id')) || 0, event: field('event') || 'message', data };
+        }
+      }
     },
     async download(path) {
       const response = await send('GET', path, '', false, true);

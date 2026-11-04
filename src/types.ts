@@ -86,7 +86,10 @@ export interface AgentInfo {
   description: string;
   tasks: { kind: string; description: string }[];
   actions: { name: string; neverAuto: boolean }[];
+  /** Quiet minutes before it sleeps, null never: the owner's choice when they made one, else what it declared. */
   sleepAfterMinutes: number | null;
+  /** Whether that is the owner's choice (the panel's «Dormir») rather than its own. */
+  sleepChosen?: boolean;
   lessonsVersion: number;
   tools?: { name: string; description: string; asks: boolean }[];
   limits?: Limits;
@@ -188,6 +191,8 @@ export interface Limits {
   autoPerDay?: number | null;
   /** What its model calls may cost in a day (from the steps it reports); past it, new tasks are refused until tomorrow. null: no limit. */
   spendPerDayUsd?: number | null;
+  /** Quiet minutes before it sleeps, over what it declares: 0 never, 5 to 1440; null leaves it to the agent. */
+  sleepAfterMinutes?: number | null;
 }
 
 /** Where an agent's traces go: an OTLP/HTTP endpoint and the names of its headers (their values never come back). */

@@ -5,7 +5,7 @@
 
 import { TaskError } from './errors.ts';
 import { query, type Client } from './http.ts';
-import type { Answer, AnyKinds, AskOptions, Feedback, Freedom, Json, Kinds, Lesson, Pause, Step, Task, TaskEvent, TenantInfo, TenantLimits } from './types.ts';
+import type { Answer, AnyKinds, AskOptions, Feedback, Freedom, Json, Kinds, Lesson, Pause, SessionFile, Step, Task, TaskEvent, TenantInfo, TenantLimits } from './types.ts';
 
 const MAX_WAIT_S = 60;
 
@@ -95,6 +95,28 @@ export class Tasks<K extends Kinds = AnyKinds> {
   /** How a finished task went: what the agent learns from. A bad one also takes back what it did alone. */
   async feedback(id: string, verdict: 'good' | 'bad', details: { correction?: Json; note?: string } = {}): Promise<Feedback> {
     return (await this.#client.call<{ feedback: Feedback }>('POST', `/tasks/${id}/feedback`, { verdict, ...details })).feedback;
+  }
+
+  /** Leaves a file in a session (a thread) for the agent's code to read: a price list, a catalogue, a document. Every
+   *  task of that thread lists it (ctx.files) and the agent downloads it (ctx.file) while it works on one. The same
+   *  name again replaces it. spredr keeps the bytes and never opens them; how the agent reads them is its code's. */
+  async attach(thread: string, name: string, data: Uint8Array | string, options: { type?: string; tenant?: string } = {}): Promise<SessionFile> {
+    const tenant = options.tenant ?? this.#tenant;
+    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+    const path = `/agents/${encodeURIComponent(this.#agent)}/files${query({ thread, file: name, ...(tenant ? { tenant } : {}) })}`;
+    return (await this.#client.upload<{ file: SessionFile }>(path, bytes, { 'x-spredr-file-type': options.type ?? (typeof data === 'string' ? 'text/plain' : 'application/octet-stream') })).file;
+  }
+
+  /** A session's files, without their bytes, newest first. */
+  async files(thread: string, options: { tenant?: string } = {}): Promise<SessionFile[]> {
+    const tenant = options.tenant ?? this.#tenant;
+    return (await this.#client.call<{ files: SessionFile[] }>('GET', `/agents/${encodeURIComponent(this.#agent)}/files${query({ thread, ...(tenant ? { tenant } : {}) })}`)).files;
+  }
+
+  /** Takes a file out of a session. */
+  async detach(thread: string, name: string, options: { tenant?: string } = {}): Promise<void> {
+    const tenant = options.tenant ?? this.#tenant;
+    await this.#client.call('DELETE', `/agents/${encodeURIComponent(this.#agent)}/files${query({ thread, file: name, ...(tenant ? { tenant } : {}) })}`);
   }
 
   /** The client and agent a tenant session works with. */

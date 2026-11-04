@@ -205,6 +205,17 @@ export interface Limits {
 
 /** How full an agent's memory is: what its facts hold of what its plan gives it, in bytes. warn from 80 %, full from
  *  95 % (the next fact may not fit: not kept, the task goes on). */
+/** A file in an agent's session (a thread, for one tenant): what a caller left for the agent's code to read. */
+export interface SessionFile {
+  id: string;
+  name: string;
+  type: string;
+  bytes: number;
+  thread?: string;
+  tenant?: string;
+  updatedAt?: string;
+}
+
 export interface MemoryUse {
   usedBytes: number;
   maxBytes: number;

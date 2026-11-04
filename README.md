@@ -192,6 +192,7 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | | |
 |---|---|
 | `ctx.ask(action, question)` | Asks a person first, and stops the task until someone answers. An action marked `neverAuto` asks every time. |
+| `ctx.files`, `ctx.file(name)` | The files its session holds (what the backend left with `attach`), and one of them as its bytes and type. spredr only delivers them: how your code reads a CSV, a JSON or a PDF is yours. |
 | `ctx.memory` | `remember(scope, text)`, `recall({ scope, q })`, `forget(id)`. A scope is whatever groups facts, such as `customer:ana`. `remember` gives back `null` when the fact was not kept (the agent's memory is full, or its tenant's share): the task goes on, and why is in its logs. |
 | `ctx.lessons` | The lessons you approved. Put them in your prompt. |
 | `ctx.trial` | `true` when an old task is replayed to test new lessons: **do nothing real**, just answer. |
@@ -273,6 +274,7 @@ await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });   // k
 | `list()`, `events(id)`, `steps(id)`, `cancel(id)` | Follow and stop tasks. |
 | `pauses()`, `answer(id, answer)` | The questions the agent is waiting on. |
 | `feedback(id, 'good' \| 'bad', { correction })` | Your verdict, with what it should have done. |
+| `attach(thread, name, data, { type })`, `files(thread)`, `detach(thread, name)` | Leaves a file in a session for the agent to read in its tasks (a price list, a catalogue, a document): sent once, every task of that thread lists it. The same name again replaces it. Up to 10 MB each; they go with the agent's record's days. |
 
 **Types, end to end.** Give the backend your agent's type and TypeScript checks each kind's name, input and result:
 
@@ -282,6 +284,15 @@ import { Caller, type KindsOf } from '@spredr/sdk';
 
 const agent = new Caller<KindsOf<typeof shop>>();
 const { reply } = await agent.result('reply', { text: 'hola' });   // reply: string
+```
+
+**What the agent needs to know.** Give it in the task (`input`, up to 256 KB), as an address its code opens, or as a
+session's file when it is bigger or the same for many tasks:
+
+```ts
+const shop = agent.for('shop_a');
+await shop.attach('chat:ana', 'precios.csv', csv, { type: 'text/csv' });
+await shop.result('reply', { text: 'hola' }, { thread: 'chat:ana' });   // the agent reads it with ctx.file('precios.csv')
 ```
 
 **Callbacks.** Link the backend with a `callbackUrl` and spredr POSTs `task.done`, `task.failed`, `task.paused` and

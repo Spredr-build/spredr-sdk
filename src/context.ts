@@ -7,7 +7,7 @@
 
 import type { Client } from './http.ts';
 import { query } from './http.ts';
-import type { Answer, Fact, Json, Step, Task } from './types.ts';
+import type { Answer, Fact, Json, SessionFile, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
 
 export interface Delivery {
@@ -19,6 +19,8 @@ export interface Delivery {
   /** What each finished step gave back, in order: `key` is the step as the handler named it. */
   memo?: { key: string; has: boolean; value: Json }[];
   lessons: { version: number; items: string[] };
+  /** Its session's files, without their bytes: what an ai from before sessions' files does not send. */
+  files?: SessionFile[];
 }
 
 export interface Context {
@@ -47,6 +49,10 @@ export interface Context {
   model<T>(work: () => Promise<T>, name?: string): Promise<T>;
   /** A task for later (a reminder, a follow-up), for the same tenant and thread. Done once per task, as track. */
   later(kind: string, input: Json, at: Date | string, key?: string): Promise<void>;
+  /** Its session's files (the thread's, for its tenant): whatever its caller left for it to read, without their bytes. */
+  files: SessionFile[];
+  /** One of them, by id or by name, as its bytes and type: read inside this task, the way its code wants. */
+  file(idOrName: string): Promise<{ data: Uint8Array; type: string; name: string }>;
   /** This tenant's memory (this task's): the agent's room is shared by all its tenants, each fact is one tenant's. */
   memory: {
     /** Done once per task, as track. The fact kept, or null when it was not (its room is full, or its tenant's share):
@@ -146,6 +152,13 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     later: (kind, input, at, key) => once('other', `later:${kind}`, `later ${kind}`, async () => {
       await call('POST', '/agent/tasks', { kind, input, at: new Date(at).toISOString(), ...(key ? { key } : {}), ...(tenant ? { tenant } : {}), ...(thread ? { thread } : {}) }, { idempotent: Boolean(key) });
     }, () => ({})),
+    files: delivery.files ?? [],
+    async file(idOrName) {
+      const found = (delivery.files ?? []).find((one) => one.id === idOrName || one.name === idOrName);
+      if (!found) throw new Error(`No file «${idOrName}» in this task's session: its files are ${(delivery.files ?? []).map((one) => one.name).join(', ') || 'none'}.`);
+      const got = await client.download(`/agent/files/${encodeURIComponent(found.id)}${query({ task: task.id })}`);
+      return { data: got.data, type: got.type, name: found.name };
+    },
     memory: {
       remember: (scope, text, extra = {}) => once('memory', `remember:${scope}`, 'remember', async () => {
         // without a key each one is a new fact: sent twice it would be two

@@ -34,6 +34,10 @@ export interface Client {
   call<T = unknown>(method: Method, path: string, body?: unknown, options?: CallOptions): Promise<T>;
   /** The answer as text (an export, one JSON per line). */
   text(method: 'GET', path: string): Promise<string>;
+  /** Bytes sent as they are (a session's file): PUT, signed over those bytes, its own headers beside them. */
+  upload<T = unknown>(path: string, data: Uint8Array, headers: Record<string, string>): Promise<T>;
+  /** Bytes back as they are, with their type (a session's file). */
+  download(path: string): Promise<{ data: Uint8Array; type: string; headers: Headers }>;
 }
 
 const TIMEOUT_MS = 75_000;
@@ -79,8 +83,8 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
   const maxRetries = Math.max(0, options.maxRetries ?? MAX_RETRIES);
   const firstDelay = options.retryDelayMs ?? RETRY_DELAY_MS;
 
-  const headersFor = (method: Method, path: string, text: string, json: boolean): Record<string, string> => {
-    const headers: Record<string, string> = { accept: json ? 'application/json' : '*/*', ...(text ? { 'content-type': 'application/json' } : {}) };
+  const headersFor = (method: Method, path: string, text: string | Uint8Array, json: boolean): Record<string, string> => {
+    const headers: Record<string, string> = { accept: json ? 'application/json' : '*/*', ...(typeof text === 'string' && text ? { 'content-type': 'application/json' } : {}) };
     if ('token' in auth) headers.authorization = `Bearer ${auth.token}`;
     else Object.assign(headers, signedHeaders(auth.from, auth.key, method, path, text));
     return headers;
@@ -92,12 +96,12 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
   };
 
   /** Sends until there is an answer worth giving back: ok, or a failure that trying again would not change. */
-  async function send(method: Method, path: string, text: string, json: boolean, repeatable: boolean): Promise<Response> {
+  async function send(method: Method, path: string, text: string | Uint8Array, json: boolean, repeatable: boolean, extra: Record<string, string> = {}): Promise<Response> {
     for (let tryNumber = 0; ; tryNumber++) {
       const last = tryNumber >= maxRetries;
       let response: Response;
       try {
-        response = await fetcher(`${root}${path}`, { method, headers: headersFor(method, path, text, json), ...(text ? { body: text } : {}), signal: AbortSignal.timeout(timeoutMs) });
+        response = await fetcher(`${root}${path}`, { method, headers: { ...headersFor(method, path, text, json), ...extra }, ...(text.length ? { body: typeof text === 'string' ? text : new Uint8Array(text) } : {}), signal: AbortSignal.timeout(timeoutMs) });
       } catch (error) {
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
         if (!repeatable || last) {
@@ -129,6 +133,19 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
       if (!parsed.ok) throw new SpredrError(response.status, `ai answered ${method} ${path} with something that is not JSON.`);
       // the answer is ai's own JSON: its shape is the type the caller named
       return parsed.value as never;
+    },
+    async upload(path, data, headers) {
+      // a PUT by name: sending it twice leaves the same file
+      const response = await send('PUT', path, data, true, true, { 'content-type': 'application/octet-stream', ...headers });
+      if (!response.ok) throw await failureOf(response);
+      const parsed = parseJson(await response.text());
+      if (!parsed.ok) throw new SpredrError(response.status, `ai answered PUT ${path} with something that is not JSON.`);
+      return parsed.value as never;
+    },
+    async download(path) {
+      const response = await send('GET', path, '', false, true);
+      if (!response.ok) throw await failureOf(response);
+      return { data: new Uint8Array(await response.arrayBuffer()), type: response.headers.get('content-type') ?? 'application/octet-stream', headers: response.headers };
     },
   };
 }

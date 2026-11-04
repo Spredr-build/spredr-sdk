@@ -21,7 +21,7 @@ export function newKeys(): { privateKey: string; publicKey: string } {
 const bytesToSign = (method: string, path: string, time: string, nonce: string, body: string | Uint8Array): Buffer =>
   Buffer.from([method.toUpperCase(), path, time, nonce, createHash('sha256').update(body).digest('hex')].join('\n'));
 
-export function signedHeaders(from: string, key: KeyObject, method: string, path: string, body: string): Record<string, string> {
+export function signedHeaders(from: string, key: KeyObject, method: string, path: string, body: string | Uint8Array): Record<string, string> {
   const time = new Date().toISOString();
   const nonce = randomBytes(16).toString('hex');
   return { [HEADERS.from]: from, [HEADERS.time]: time, [HEADERS.nonce]: nonce, [HEADERS.signature]: sign(null, bytesToSign(method, path, time, nonce, body), key).toString('base64') };

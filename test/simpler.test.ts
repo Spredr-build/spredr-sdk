@@ -139,13 +139,13 @@ test('a result is sent again when ai failed; one ai already has is fine; one tha
   await give(delivery('reply', {}, { id: 'tsk_2' }));
   await until(() => ai.last('/agent/tasks/tsk_2/result'));
   await give(delivery('reply', {}, { id: 'tsk_3' }));
-  await until(() => lines.some((line) => line.includes('tsk_3')));
+  await until(() => lines.some((line) => line.includes('tsk_3') && line.includes('ai gives it again')));
   const sent = (id: string) => ai.seen.filter((one) => one.path === `/agent/tasks/${id}/result`).map((one) => one.json);
   assert.deepEqual(sent('tsk_1'), [{ attempt: 1, result: 'sí' }, { attempt: 1, result: 'sí' }], 'tried again after the 503');
   assert.equal(sent('tsk_2').length, 1, 'a 409: ai has it already');
   assert.ok(sent('tsk_3').every((body) => (body as { result?: string }).result === 'sí'), 'never reported as an error');
-  assert.equal(lines.filter((line) => line.includes('tsk_2')).length, 0);
-  assert.match(lines.find((line) => line.includes('tsk_3')) ?? '', /ai gives it again/);
+  assert.deepEqual(lines.filter((line) => line.includes('tsk_2')), ['tsk_2 reply done in 0.0 s'], 'a 409 says nothing more than its task\'s line');
+  assert.ok(lines.some((line) => line.includes('tsk_3') && /ai gives it again/.test(line)));
 });
 
 test('coming back with its journal, a task asked A then B gets both answers and asks nothing again: no loop', async (t) => {

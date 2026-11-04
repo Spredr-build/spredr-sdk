@@ -184,6 +184,7 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 |---|---|---|
 | `shutdownGraceMs` | 25 000 | on a stop, how long running tasks may finish |
 | `log` | the console | where its lines go; `false` says nothing |
+| `tagLogs` | `true` | what a task prints with `console` starts with its id; `false` leaves console alone |
 | `id`, `key`, `ai`, `aiKey` | its variables | written by spredr when it registers the agent |
 
 `ctx` gives the handler the rest:
@@ -228,6 +229,20 @@ app.post(shop.path, async (request, reply) => {   // with the body kept raw for 
   return reply.code(answer.status).headers(answer.headers).send(answer.body);
 });
 await shop.start();
+```
+
+### Its logs, task by task
+
+What a task prints with `console` starts with its id, however deep in your code (`[tsk_7f3a…] looking up the
+catalog`), and the agent writes one line when each task ends (`tsk_7f3a… reply done in 4.6 s`, or why it failed). So
+searching the deployment's logs for a task's id, as the panel's «Ver sus registros» does, finds what it did. A logger
+that writes on its own adds the id with `currentTask()`:
+
+```ts
+import pino from 'pino';
+import { currentTask } from '@spredr/sdk';
+
+const log = pino({ mixin: () => ({ task: currentTask() ?? undefined }) });   // {"task":"tsk_7f3a…","msg":"…"}
 ```
 
 ## Your backend

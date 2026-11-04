@@ -3,7 +3,7 @@
 
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { Agent, type AgentOptions, type Handler } from '../src/index.ts';
+import { Agent, currentTask, type AgentOptions, type Handler } from '../src/index.ts';
 import { agentKeys, deliver, delivery, fakeAi, until, type Route } from './helpers.ts';
 
 async function running(t: TestContext, handlers: Record<string, Handler>, route?: Route, manifest: Partial<AgentOptions> = {}) {
@@ -159,4 +159,34 @@ test('without its variables an agent says which one is missing', () => {
   const keys = agentKeys();
   assert.throws(() => new Agent({ ...keys.options, aiKey: '' }), /SPREDR_AI_KEY is not set/);
   assert.throws(() => new Agent({ ...keys.options, id: '' }), /SPREDR_AGENT_ID is not set/);
+});
+
+test('what a task prints carries its id, and each task ends with a line of its own: its logs find it', async (t) => {
+  const lines: string[] = [];
+  const out: string[] = [];
+  // what reaches the deployment's logs: the process's stdout, whatever console was given
+  const write = process.stdout.write.bind(process.stdout);
+  const listen = () => { process.stdout.write = ((chunk: string | Uint8Array) => { out.push(String(chunk)); return true; }) as typeof process.stdout.write; };
+  t.after(() => { process.stdout.write = write; });
+  const { ai, give } = await running(t, {
+    reply: async (_, ctx) => {
+      listen();
+      console.log('looking up the catalog for %s', 'demo-shop');
+      console.info({ step: 'catalog' });
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      console.log('still', ctx.task.id, currentTask());
+      process.stdout.write = write;
+      return 'ok';
+    },
+    broken: () => { throw new Error('the shop API is down'); },
+  }, undefined, { log: (line) => lines.push(line) });
+  await give(delivery('reply', {}));
+  await resultOf(ai);
+  await give(delivery('broken', {}, { id: 'tsk_2' }));
+  await resultOf(ai, 'tsk_2');
+  await until(() => lines.length >= 2);
+  assert.deepEqual(out, ['[tsk_1] looking up the catalog for demo-shop\n', "[tsk_1] { step: 'catalog' }\n", '[tsk_1] still tsk_1 tsk_1\n'], 'a format string keeps its place; after an await it still knows its task');
+  assert.match(lines.find((line) => line.startsWith('tsk_1')) ?? '', /^tsk_1 reply done in \d+\.\d s$/);
+  assert.equal(lines.find((line) => line.startsWith('tsk_2')), 'tsk_2 broken failed: the shop API is down');
+  assert.equal(currentTask(), null, 'outside a task, no task');
 });

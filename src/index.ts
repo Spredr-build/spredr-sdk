@@ -15,5 +15,6 @@ export type { CallOptions, ClientOptions } from './http.ts';
 export { DEFAULT_AI_URL, OwnedAgent, Spredr, type SpredrOptions } from './owner.ts';
 export type { InferInput, InferOutput, StandardSchemaV1 } from './schema.ts';
 export { aiVerifier, newKeys, type Incoming } from './sign.ts';
+export { currentTask } from './tag.ts';
 export { Tasks, Tenant } from './tasks.ts';
 export type * from './types.ts';

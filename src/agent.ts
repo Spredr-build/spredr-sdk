@@ -13,6 +13,7 @@ import { ConflictError } from './errors.ts';
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { validated, type InferInput, type InferOutput, type StandardSchemaV1 } from './schema.ts';
 import { aiVerifier, privateKeyOf, type Incoming } from './sign.ts';
+import { asTask, tagConsole } from './tag.ts';
 import type { Feedback, Json, Kinds, Task } from './types.ts';
 
 export type { Context, Delivery } from './context.ts';
@@ -44,6 +45,9 @@ export interface AgentOptions extends Manifest, ClientOptions {
   aiKey?: string;
   /** Where its lines go; false says nothing. */
   log?: ((line: string) => void) | false;
+  /** console's lines printed while a task works start with its id (`[tsk_…] …`), so its logs find them; true unless
+   *  false. A logger of its own adds it with currentTask(). */
+  tagLogs?: boolean;
   /** On SIGTERM, how long running tasks may finish before it exits, in ms: 25 s by default. */
   shutdownGraceMs?: number;
 }
@@ -97,7 +101,8 @@ export class Agent<K extends Kinds = {}> {
   #closing = false;
 
   constructor(options: AgentOptions = {}) {
-    const { id, key, ai, aiKey, fetch, timeoutMs, maxRetries, retryDelayMs, log, shutdownGraceMs, ...manifest } = options;
+    const { id, key, ai, aiKey, fetch, timeoutMs, maxRetries, retryDelayMs, log, shutdownGraceMs, tagLogs, ...manifest } = options;
+    if (tagLogs !== false) tagConsole();
     this.#manifest = manifest;
     const clientOptions = { ...(fetch ? { fetch } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(maxRetries === undefined ? {} : { maxRetries }), ...(retryDelayMs === undefined ? {} : { retryDelayMs }) };
     this.#client = client(need(ai, 'SPREDR_AI_URL'), { from: need(id, 'SPREDR_AGENT_ID'), key: privateKeyOf(need(key, 'SPREDR_AGENT_KEY')) }, clientOptions);
@@ -207,15 +212,22 @@ export class Agent<K extends Kinds = {}> {
     // the server keeps the process alive while it listens; a beat alone never does (a task past the grace is ai's again)
     const beat = setInterval(() => void this.#client.call('POST', `${path}/progress`, { attempt: task.attempt, data: { alive: true } }).catch(() => undefined), beatMs).unref();
     let outcome: { result: unknown } | { error: string };
+    const started = Date.now();
     try {
-      outcome = { result: (await handler(task.input, contextFor(this.#client, delivery))) ?? null };
+      // everything the handler does, however deep, knows which task it is working on (tag.ts)
+      outcome = { result: (await asTask(task.id, () => handler(task.input, contextFor(this.#client, delivery)))) ?? null };
     } catch (error) {
-      if (error === PAUSED) return;
+      if (error === PAUSED) {
+        this.#log(`${task.id} ${task.kind} waits for an answer`);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       outcome = { error: message.slice(0, 2_000) || 'failed' };
     } finally {
       clearInterval(beat);
     }
+    // one line per task with its id, whatever the handler printed: its logs always find it
+    this.#log('error' in outcome ? `${task.id} ${task.kind} failed: ${outcome.error.slice(0, 200)}` : `${task.id} ${task.kind} done in ${((Date.now() - started) / 1000).toFixed(1)} s`);
     // ai closes an attempt once, so sending it again is safe, and a 409 says it was closed already. A result that cannot
     // be sent is never turned into a failure: ai gives the task again when its lease ends.
     try {

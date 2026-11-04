@@ -111,6 +111,22 @@ test('track times a step and reports it, with what usage reads; a failed step is
   assert.deepEqual({ kind: steps[1]?.kind, ok: steps[1]?.ok, detail: steps[1]?.detail }, { kind: 'tool', ok: false, detail: 'no such order' });
 });
 
+test('a fact ai did not keep (a full memory) comes back null and the task goes on to its result', async (t) => {
+  const warned: string[] = [];
+  const warn = console.warn;
+  console.warn = (...parts: unknown[]) => { warned.push(parts.join(' ')); };
+  t.after(() => { console.warn = warn; });
+  const { ai, give } = await running(t, {
+    reply: async (_, ctx) => {
+      const fact = await ctx.memory.remember('customer:ana', 'Prefiere los martes');
+      return fact === null ? 'answered anyway' : 'kept';
+    },
+  }, (request) => (request.path === '/agent/memory' ? { body: { kept: false, fact: null, why: "Not kept: storio's memory is full, 10.00 of 10.00 MB" } } : undefined));
+  await give(delivery('reply', {}));
+  assert.equal((await resultOf(ai)).result, 'answered anyway');
+  assert.ok(warned.some((line) => /memory: Not kept: storio's memory is full/.test(line)), 'why is in its logs');
+});
+
 test('memory, progress, steps and later tasks go to ai, signed by the agent', async (t) => {
   const { ai, give } = await running(t, {
     reply: async (_, ctx) => {
@@ -123,7 +139,7 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
       return facts.length;
     },
   }, (request) => {
-    if (request.path === '/agent/memory') return { body: { fact: { id: 'ft_1' } } };
+    if (request.path === '/agent/memory') return { body: { kept: true, fact: { id: 'ft_1' } } };
     if (request.path.startsWith('/agent/memory?')) return { body: { facts: [{ id: 'ft_1' }] } };
     return undefined;
   });

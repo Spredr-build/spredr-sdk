@@ -49,8 +49,9 @@ export interface Context {
   later(kind: string, input: Json, at: Date | string, key?: string): Promise<void>;
   /** This tenant's memory (this task's): the agent's room is shared by all its tenants, each fact is one tenant's. */
   memory: {
-    /** Done once per task, as track. */
-    remember(scope: string, text: string, extra?: { key?: string; data?: Json }): Promise<Fact>;
+    /** Done once per task, as track. The fact kept, or null when it was not (its room is full, or its tenant's share):
+     *  the task goes on either way, and why is printed in its logs. */
+    remember(scope: string, text: string, extra?: { key?: string; data?: Json }): Promise<Fact | null>;
     recall(options: { scope?: string; q?: string; limit?: number }): Promise<Fact[]>;
     forget(id: string): Promise<void>;
   };
@@ -146,9 +147,12 @@ export function contextFor(client: Client, delivery: Delivery): Context {
       await call('POST', '/agent/tasks', { kind, input, at: new Date(at).toISOString(), ...(key ? { key } : {}), ...(tenant ? { tenant } : {}), ...(thread ? { thread } : {}) }, { idempotent: Boolean(key) });
     }, () => ({})),
     memory: {
-      remember: (scope, text, extra = {}) => once('memory', `remember:${scope}`, 'remember', async () =>
+      remember: (scope, text, extra = {}) => once('memory', `remember:${scope}`, 'remember', async () => {
         // without a key each one is a new fact: sent twice it would be two
-        (await call<{ fact: Fact }>('PUT', '/agent/memory', { task: task.id, scope, text, ...extra }, { idempotent: Boolean(extra.key) })).fact, () => ({})),
+        const answer = await call<{ kept: boolean; fact: Fact | null; why?: string }>('PUT', '/agent/memory', { task: task.id, scope, text, ...extra }, { idempotent: Boolean(extra.key) });
+        if (!answer.kept) console.warn(`memory: ${answer.why ?? 'this fact was not kept'}`);
+        return answer.fact;
+      }, () => ({})),
       async recall(options) {
         return (await call<{ facts: Fact[] }>('GET', `/agent/memory${query({ ...options, task: task.id })}`)).facts;
       },

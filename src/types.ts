@@ -199,6 +199,19 @@ export interface Limits {
   sleepAfterMinutes?: number | null;
   /** Days its finished tasks are kept: 7, 30, 60, 90, 365 or 1825, never past what the plan keeps; null: the plan's. */
   keepDays?: 7 | 30 | 60 | 90 | 365 | 1825 | null;
+  /** Days a fact may go unchanged before it is forgotten: 30, 90, 180 or 365; null: never by itself. */
+  forgetAfterDays?: 30 | 90 | 180 | 365 | null;
+}
+
+/** How full an agent's memory is: what its facts hold of what its plan gives it, in bytes. warn from 80 %, full from
+ *  95 % (the next fact may not fit: not kept, the task goes on). */
+export interface MemoryUse {
+  usedBytes: number;
+  maxBytes: number;
+  share: number;
+  warn: boolean;
+  full: boolean;
+  forgetAfterDays: number | null;
 }
 
 /** Where an agent's traces go: an OTLP/HTTP endpoint and the names of its headers (their values never come back). */

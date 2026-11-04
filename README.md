@@ -192,7 +192,7 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | | |
 |---|---|
 | `ctx.ask(action, question)` | Asks a person first, and stops the task until someone answers. An action marked `neverAuto` asks every time. |
-| `ctx.memory` | `remember(scope, text)`, `recall({ scope, q })`, `forget(id)`. A scope is whatever groups facts, such as `customer:ana`. |
+| `ctx.memory` | `remember(scope, text)`, `recall({ scope, q })`, `forget(id)`. A scope is whatever groups facts, such as `customer:ana`. `remember` gives back `null` when the fact was not kept (the agent's memory is full, or its tenant's share): the task goes on, and why is in its logs. |
 | `ctx.lessons` | The lessons you approved. Put them in your prompt. |
 | `ctx.trial` | `true` when an old task is replayed to test new lessons: **do nothing real**, just answer. |
 | `ctx.model(() => call)` | A model call, timed and reported with its model and tokens, read from the answer of Claude, OpenAI or the AI SDK. |

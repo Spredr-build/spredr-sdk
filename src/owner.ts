@@ -2,7 +2,7 @@
 
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { Tasks, type Tenant } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Redeploy, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
+import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, MemoryUse, Pause, Redeploy, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
 
 export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
@@ -39,8 +39,9 @@ export class Spredr {
     await this.#client.call('PUT', '/me/key', { token });
   }
 
-  /** What waits for a person across every agent: open questions, and tasks that failed in the last `hours`. */
-  async inbox(hours = 24): Promise<{ questions: (Pause & { agent: string })[]; errors: Task[] }> {
+  /** What waits for a person across every agent: open questions, tasks that failed in the last `hours`, and agents whose
+   *  memory is 80 % full or more. */
+  async inbox(hours = 24): Promise<{ questions: (Pause & { agent: string })[]; errors: Task[]; memory: { agent: string; usedBytes: number; maxBytes: number; full: boolean }[] }> {
     return this.#client.call('GET', `/inbox${query({ hours })}`);
   }
 
@@ -146,6 +147,11 @@ export class OwnedAgent {
   /** A secret address that starts a task with whatever is POSTed to it; the address comes back this once. */
   async hook(name: string, kind: string) {
     return this.#client.call<{ hook: { id: string; name: string }; url: string }>('POST', `${this.#path}/hooks`, { name, kind });
+  }
+
+  /** How full its memory is (warn from 80 %, full from 95 %), and whether unchanged facts are forgotten. */
+  async memoryUse(): Promise<MemoryUse> {
+    return (await this.#client.call<{ use: MemoryUse }>('GET', `${this.#path}/memory/use`)).use;
   }
 
   /** What it remembers; `tenant` narrows it to one tenant's. */

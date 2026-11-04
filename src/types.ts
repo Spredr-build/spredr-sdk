@@ -217,6 +217,9 @@ export interface SessionFile {
   bytes: number;
   thread?: string;
   tenant?: string;
+  /** Where its bytes are in spredr's files' bucket: owners/<owner>/agents/<agent>/sessions/<tenant>/<thread>/<id>. */
+  path?: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 

@@ -2,7 +2,7 @@
 
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { Tasks, type Tenant } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, MemoryUse, Pause, Redeploy, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
+import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, MemoryUse, Pause, Redeploy, SessionFile, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
 
 export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
@@ -147,6 +147,23 @@ export class OwnedAgent {
   /** A secret address that starts a task with whatever is POSTed to it; the address comes back this once. */
   async hook(name: string, kind: string) {
     return this.#client.call<{ hook: { id: string; name: string }; url: string }>('POST', `${this.#path}/hooks`, { name, kind });
+  }
+
+  /** Every file its sessions keep, newest first (each with its tenant, conversation and place in the bucket), and how full
+   *  its room for them is. */
+  async storedFiles(options: { before?: string; limit?: number } = {}): Promise<{ files: SessionFile[]; usedBytes: number; maxBytes: number }> {
+    return this.#client.call('GET', `${this.#path}/stored-files${query(options)}`);
+  }
+
+  /** One of them, as its bytes and type: any session's. */
+  async downloadFile(id: string): Promise<{ data: Uint8Array; type: string }> {
+    const got = await this.#client.download(`${this.#path}/stored-files/${encodeURIComponent(id)}`);
+    return { data: got.data, type: got.type };
+  }
+
+  /** Removes one, any session's: its card and its bytes. */
+  async deleteFile(id: string): Promise<void> {
+    await this.#client.call('DELETE', `${this.#path}/stored-files/${encodeURIComponent(id)}`);
   }
 
   /** How full its memory is (warn from 80 %, full from 95 %), and whether unchanged facts are forgotten. */

@@ -223,9 +223,13 @@ export interface SessionFile {
   updatedAt?: string;
 }
 
+/** An agent's space: its memory and its sessions' files share it (its plan's, plus packs bought in spredr). */
 export interface MemoryUse {
+  /** Memory and files together. */
   usedBytes: number;
   maxBytes: number;
+  memoryBytes: number;
+  filesBytes: number;
   share: number;
   warn: boolean;
   full: boolean;

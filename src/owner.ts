@@ -151,7 +151,7 @@ export class OwnedAgent {
 
   /** Every file its sessions keep, newest first (each with its tenant, conversation and place in the bucket), and how full
    *  its room for them is. */
-  async storedFiles(options: { before?: string; limit?: number } = {}): Promise<{ files: SessionFile[]; usedBytes: number; maxBytes: number }> {
+  async storedFiles(options: { before?: string; limit?: number } = {}): Promise<{ files: SessionFile[]; usedBytes: number; maxBytes: number; filesBytes: number; memoryBytes: number }> {
     return this.#client.call('GET', `${this.#path}/stored-files${query(options)}`);
   }
 

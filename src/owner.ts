@@ -2,7 +2,7 @@
 
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { Tasks, type Tenant } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
+import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, Pause, Redeploy, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
 
 export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
@@ -27,9 +27,11 @@ export class Spredr {
     return (await this.#client.call<{ agents: AgentInfo[] }>('GET', '/agents')).agents;
   }
 
-  /** Turns a spredr service into an agent: ai writes its keys into the service and deploys it again. */
-  async register(name: string, service: string, options: { redeploy?: boolean } = {}): Promise<AgentInfo> {
-    return (await this.#client.call<{ agent: AgentInfo }>('POST', '/agents', { name, service, ...options })).agent;
+  /** Turns a spredr service into an agent: ai writes its keys into the service and deploys it again. A deploy spredr
+   *  refuses (redeploy.status «failed») leaves the agent made: deploy the service again once that is fixed. */
+  async register(name: string, service: string, options: { redeploy?: boolean } = {}): Promise<AgentInfo & { redeploy: Redeploy }> {
+    const made = await this.#client.call<{ agent: AgentInfo; redeploy: Redeploy }>('POST', '/agents', { name, service, ...options });
+    return { ...made.agent, redeploy: made.redeploy };
   }
 
   /** Leaves a token for ai to wake and put to sleep your agents while nobody is looking. */
@@ -116,8 +118,10 @@ export class OwnedAgent {
     await this.#client.call('DELETE', this.#path);
   }
 
-  async rotateKey(options: { redeploy?: boolean } = {}): Promise<AgentInfo> {
-    return (await this.#client.call<{ agent: AgentInfo }>('POST', `${this.#path}/rotate`, options)).agent;
+  /** A new key pair: ai believes the new key at once, whatever the redeploy does (redeploy.status says). */
+  async rotateKey(options: { redeploy?: boolean } = {}): Promise<AgentInfo & { redeploy: Redeploy }> {
+    const rotated = await this.#client.call<{ agent: AgentInfo; redeploy: Redeploy }>('POST', `${this.#path}/rotate`, options);
+    return { ...rotated.agent, redeploy: rotated.redeploy };
   }
 
   /** A backend that may give this agent tasks. With `service`, ai writes its key there; with `publicKey`, the private

@@ -77,6 +77,10 @@ export interface Fact {
   updatedAt: string;
 }
 
+/** The service's redeploy after its keys changed: asked for, not asked for, or refused by spredr (and why). The agent
+ *  is made, or its new key taken, either way. */
+export type Redeploy = { status: 'started' | 'skipped' } | { status: 'failed'; error: string };
+
 export interface AgentInfo {
   id: string;
   name: string;

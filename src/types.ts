@@ -193,8 +193,8 @@ export interface Limits {
   spendPerDayUsd?: number | null;
   /** Quiet minutes before it sleeps, over what it declares: 0 never, 5 to 1440; null leaves it to the agent. */
   sleepAfterMinutes?: number | null;
-  /** Days its finished tasks are kept: 7, 30, 90, 365 or 1825, never past what the plan keeps; null: the plan's. */
-  keepDays?: 7 | 30 | 90 | 365 | 1825 | null;
+  /** Days its finished tasks are kept: 7, 30, 60, 90, 365 or 1825, never past what the plan keeps; null: the plan's. */
+  keepDays?: 7 | 30 | 60 | 90 | 365 | 1825 | null;
 }
 
 /** Where an agent's traces go: an OTLP/HTTP endpoint and the names of its headers (their values never come back). */

@@ -63,7 +63,7 @@ three parties around it talk to each other.
 | **You** | `Spredr` | register agents, link backends, schedule work, read memory, approve lessons, set limits |
 
 <p align="center">
-  <img src="assets/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
+  <img src="https://spredr.cloud/branding/sdk/flow.webp" width="760" alt="Your backend (Caller) sends a task to spredr (ai), which hands it to your agent (Agent); the result comes back the same way. You (Spredr, with your token) answer questions and manage memory, lessons and limits. Every request is signed with ed25519, with no shared secrets.">
 </p>
 
 **Requirements.** Node 22.12 or newer, and nothing else: the SDK has no dependencies. It is written in TypeScript and

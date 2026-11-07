@@ -120,6 +120,9 @@ spredr login
 
 **2. Write the agent**
 
+The example uses Claude; any provider works the same way, because your code calls the model, not spredr (see
+[Any model](#any-model) right after it).
+
 ```sh
 npm install @spredr/sdk @anthropic-ai/sdk
 ```
@@ -144,6 +147,21 @@ export const shop = new Agent({ description: 'Answers the shop\'s customers', sl
   });
 
 shop.listen(); // PORT, 8080 by default
+```
+
+<a id="any-model"></a>**Any model.** Wrap the call in `ctx.model()` and it reads the model and the tokens on its own
+for Anthropic, OpenAI (Chat Completions and Responses) and the Vercel AI SDK, which reaches Google, Mistral and the
+rest. For anything else, `ctx.track()` takes the numbers from you:
+
+```ts
+// OpenAI
+const completion = await ctx.model(() => openai.chat.completions.create({ model: 'gpt-4.1-mini', messages }));
+
+// the Vercel AI SDK: Gemini here, any provider it supports
+const { text } = await ctx.model(() => generateText({ model: google('gemini-2.5-flash'), prompt: question }));
+
+// your own model, or a client whose answer spredr cannot read: you say what it used
+const out = await ctx.track('model', 'my-model', () => myModel.run(question), (result) => ({ model: 'my-model', tokensIn: result.inputTokens, tokensOut: result.outputTokens }));
 ```
 
 **3. Deploy it and make it an agent**

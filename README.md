@@ -132,11 +132,13 @@ npm install @spredr/sdk @anthropic-ai/sdk
 import { Agent } from '@spredr/sdk';
 import Anthropic from '@anthropic-ai/sdk';
 
-const claude = new Anthropic(); // ANTHROPIC_API_KEY, set with: spredr vars set shop-agent ANTHROPIC_API_KEY=…
+// ANTHROPIC_API_KEY, set with: spredr vars set shop-agent ANTHROPIC_API_KEY=…
+const claude = new Anthropic();
 
 export const shop = new Agent({ description: 'Answers the shop\'s customers', sleepAfterMinutes: 15 })
   .on('reply', async ({ text }: { text: string }, ctx) => {
-    const message = await ctx.model(() => claude.messages.create({   // timed, model and tokens reported for you
+    // timed, model and tokens reported for you
+    const message = await ctx.model(() => claude.messages.create({
       model: 'claude-haiku-5-5',
       max_tokens: 400,
       system: ['You answer for a small shop. Be brief.', ...ctx.lessons].join('\n'),
@@ -146,7 +148,8 @@ export const shop = new Agent({ description: 'Answers the shop\'s customers', sl
     return { reply: answer?.type === 'text' ? answer.text : '' };
   });
 
-shop.listen(); // PORT, 8080 by default
+// PORT, 8080 by default
+shop.listen();
 ```
 
 <a id="any-model"></a>**Any model.** Wrap the call in `ctx.model()` and it reads the model and the tokens on its own
@@ -169,8 +172,10 @@ const out = await ctx.track('model', 'my-model', () => myModel.run(question), (r
 Push it to a repo, then:
 
 ```sh
-spredr new you/shop-agent --port 8080   # a service, built from your repo
-spredr agents add shop shop-agent       # the service becomes the agent «shop»
+# a service, built from your repo
+spredr new you/shop-agent --port 8080
+# the service becomes the agent «shop»
+spredr agents add shop shop-agent
 ```
 
 **4. Give it a task**
@@ -185,7 +190,8 @@ spredr ask shop reply '{"text":"Are you open on Sunday?"}'
 import { Spredr } from '@spredr/sdk';
 
 // once, with your token: link your backend's service to the agent
-await new Spredr().agent('shop').addCaller('shop-api', { service: 'shop-api' });   // reads SPREDR_TOKEN
+// reads SPREDR_TOKEN
+await new Spredr().agent('shop').addCaller('shop-api', { service: 'shop-api' });
 ```
 
 ```ts
@@ -216,7 +222,8 @@ new Agent({
       if (!answer.yes) return { reply: 'We cannot refund this one.' };
     }
     await ctx.memory.remember(`customer:${customer}`, `Asked: ${text}`, { key: 'last' });
-    return { reply: await think(text, known, ctx.lessons) };   // think(): your model call
+    // think(): your model call
+    return { reply: await think(text, known, ctx.lessons) };
   })
   .listen();
 ```
@@ -280,7 +287,8 @@ it yourself, `await agent.close()`.
 it returns. `start()` says hello; your server's shutdown calls `close()`.
 
 ```ts
-app.post(shop.path, async (request, reply) => {   // with the body kept raw for this route
+// with the body kept raw for this route
+app.post(shop.path, async (request, reply) => {
   const answer = await shop.handle({ method: 'POST', path: request.url, headers: request.headers, body: request.rawBody });
   return reply.code(answer.status).headers(answer.headers).send(answer.body);
 });
@@ -298,7 +306,8 @@ that writes on its own adds the id with `currentTask()`:
 import pino from 'pino';
 import { currentTask } from '@spredr/sdk';
 
-const log = pino({ mixin: () => ({ task: currentTask() ?? undefined }) });   // {"task":"tsk_7f3a…","msg":"…"}
+// {"task":"tsk_7f3a…","msg":"…"}
+const log = pino({ mixin: () => ({ task: currentTask() ?? undefined }) });
 ```
 
 ## Your backend
@@ -306,16 +315,19 @@ const log = pino({ mixin: () => ({ task: currentTask() ?? undefined }) });   // 
 ```ts
 import { Caller } from '@spredr/sdk';
 
-const agent = new Caller();   // reads the variables spredr wrote into this service
+// reads the variables spredr wrote into this service
+const agent = new Caller();
 
 const task = await agent.run('reply', { customer: 'ana', text: 'hola' }, { key: messageId, thread: 'customer:ana' });
 
 if (task.status === 'paused') {
-  const [question] = await agent.pauses();         // show it in your app
+  // show it in your app
+  const [question] = await agent.pauses();
   await agent.answer(question.id, { yes: true });
 }
 
-await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });   // kept for the agent to learn from
+// kept for the agent to learn from
+await agent.feedback(task.id, 'bad', { correction: 'Offer two times.' });
 ```
 
 | | |
@@ -339,7 +351,8 @@ import type { shop } from '../shop-agent/index.ts';
 import { Caller, type KindsOf } from '@spredr/sdk';
 
 const agent = new Caller<KindsOf<typeof shop>>();
-const { reply } = await agent.result('reply', { text: 'hola' });   // reply: string
+// reply: string
+const { reply } = await agent.result('reply', { text: 'hola' });
 ```
 
 **What the agent needs to know.** Give it in the task (`input`, up to 256 KB), as an address its code opens, or as a
@@ -348,7 +361,8 @@ session's file when it is bigger or the same for many tasks:
 ```ts
 const shop = agent.for('shop_a');
 await shop.attach('chat:ana', 'precios.csv', csv, { type: 'text/csv' });
-await shop.result('reply', { text: 'hola' }, { thread: 'chat:ana' });   // the agent reads it with ctx.file('precios.csv')
+// the agent reads it with ctx.file('precios.csv')
+await shop.result('reply', { text: 'hola' }, { thread: 'chat:ana' });
 ```
 
 **Callbacks.** Link the backend with a `callbackUrl` and spredr POSTs `task.done`, `task.failed`, `task.paused` and
@@ -362,7 +376,8 @@ booking agent for many businesses. Each task can say whom it works for, its **te
 them (a user id, an account, a team, a business). Open a session for one with `for(tenant)`:
 
 ```ts
-const user = agent.for('user_42');   // agent is your Caller
+// agent is your Caller
+const user = agent.for('user_42');
 
 const { reply } = await user.result('reply', { text: 'remind me to call mom on Friday' }, { thread: 'chat_9' });
 ```
@@ -389,22 +404,35 @@ the agent's own work, as before.
 ```ts
 import { Spredr } from '@spredr/sdk';
 
-const spredr = new Spredr();   // SPREDR_TOKEN, or new Spredr({ token })
+// SPREDR_TOKEN, or new Spredr({ token })
+const spredr = new Spredr();
 const shop = spredr.agent('shop');
 
-await spredr.register('shop', 'shop-agent');                    // a service becomes an agent
-await shop.addCaller('shop-api', { service: 'shop-api' });     // a backend may call it
+// a service becomes an agent
+await spredr.register('shop', 'shop-agent');
+// a backend may call it
+await shop.addCaller('shop-api', { service: 'shop-api' });
+// a task every morning at 8, Bogotá time
 await shop.schedule('morning', 'digest', '0 8 * * *', { tz: 'America/Bogota' });
-await shop.hook('orders', 'new-order');                        // a webhook URL that makes tasks
-await shop.setFreedom('refund', 'ask');                        // ask before refunds
+// a webhook URL that makes tasks
+await shop.hook('orders', 'new-order');
+// ask before refunds
+await shop.setFreedom('refund', 'ask');
+// at most 200 actions alone and 15 USD a day
 await shop.setLimits({ autoPerDay: 200, spendPerDayUsd: 15 });
 
-await shop.summary();          // its last day: tasks, failures, times, tokens, cost
+// its last day: tasks, failures, times, tokens, cost
+await shop.summary();
+// what it remembers of one customer
 await shop.memory({ scope: 'customer:ana' });
-await shop.forget('customer:ana');                              // a customer who asks to be forgotten
-await shop.lessons();          // proposed and live lessons; decide(id, 'accept') to approve one
-await shop.export();           // every task with its steps
-await spredr.inbox();          // what waits for you, across every agent
+// a customer who asks to be forgotten
+await shop.forget('customer:ana');
+// proposed and live lessons; decide(id, 'accept') to approve one
+await shop.lessons();
+// every task with its steps
+await shop.export();
+// what waits for you, across every agent
+await spredr.inbox();
 ```
 
 **Limits keep a mistake small.** `autoPerDay` caps the actions it takes alone in a day; past it, it asks again.

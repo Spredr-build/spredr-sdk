@@ -215,3 +215,22 @@ test('a step that gave back nothing gives back nothing again', async (t) => {
   assert.deepEqual((await resultOf(ai)).result, { was: 'nothing' });
   assert.equal(ran, false);
 });
+
+test('attack: a yes given to one amount is never reused for another; the same question about the same data still is', async (t) => {
+  const refunded: number[] = [];
+  const { ai, give } = await running(t, (agent) => agent.on('refunds', async (input, ctx) => {
+    const amount = (input as { amount: number }).amount;
+    const answer = await ctx.ask('refund', `Refund ${amount} to ana?`, { data: { to: 'ana', amount } });
+    if (answer.yes) refunded.push(amount);
+    return { yes: answer.yes };
+  }));
+  const approved = [{ pause: 'pz_1', action: 'refund', question: 'Refund 10 to ana?', data: { amount: 10, to: 'ana' }, yes: true }];
+  // the re-run asks about 1000: the yes for 10 is not its answer, it asks again for real
+  await give(delivery('refunds', { amount: 1000 }, { answers: approved }));
+  await until(() => ai.last('/agent/tasks/tsk_1/pause'));
+  assert.deepEqual(refunded, [], 'nothing refunded on someone else\'s yes');
+  // the same question about the same data (keys in another order) is the one answered
+  await give(delivery('refunds', { amount: 10 }, { id: 'tsk_2', answers: approved }));
+  await until(() => ai.last('/agent/tasks/tsk_2/result'));
+  assert.deepEqual(refunded, [10]);
+});

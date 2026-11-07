@@ -10,14 +10,24 @@ import { query } from './http.ts';
 import type { Answer, Fact, Json, SessionFile, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
 
+/** Two JSON values with the same content, whatever the order of their keys. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameJson(Reflect.get(a, key), Reflect.get(b, key)));
+}
+
 export interface Delivery {
   /** Whom ai addressed it to, inside what it signs: an agent refuses one addressed to another. Absent from an older ai. */
   to?: { agent: string };
   task: { id: string; kind: string; input: Json; attempt: number; by: Task['by']; trial: boolean; judges: string | null; createdAt: string; tenant?: string; thread?: string | null };
   /** The last answer only: what an ai from before the journal sends. */
-  resume: (Answer & { pause: string; action: string }) | null;
+  resume: (Answer & { pause: string; action: string; question?: string; data?: Json | null }) | null;
   /** Every answer the task's questions got, in the order asked (free ones too). */
-  answers?: (Answer & { pause: string; action: string; auto?: boolean })[];
+  answers?: (Answer & { pause: string; action: string; auto?: boolean; question?: string; data?: Json | null })[];
   /** What each finished step gave back, in order: `key` is the step as the handler named it. */
   memo?: { key: string; has: boolean; value: Json }[];
   lessons: { version: number; items: string[] };
@@ -157,7 +167,13 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     task, tenant, thread, lessons: delivery.lessons.items, trial: task.trial,
     async ask(action, question, extra = {}) {
       const answer = answers[nextAnswer];
-      if (answer && answer.action === action) {
+      // an answer is this question's only when it was given to the same action, question and data: asked about other
+      // data on a re-run (another amount, another account), the earlier yes is not this one's (security audit run-1).
+      // An ai from before sends neither question nor data: the action alone decides, as before
+      const sameAsked = answer !== undefined && answer.action === action
+        && (answer.question === undefined || answer.question === question)
+        && (answer.data === undefined || sameJson(answer.data, extra.data ?? null));
+      if (answer && sameAsked) {
         nextAnswer += 1;
         return answer;
       }

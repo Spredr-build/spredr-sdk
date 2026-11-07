@@ -3,6 +3,7 @@
 
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { stripVTControlCharacters } from 'node:util';
 import { Agent, currentTask, type AgentOptions, type Handler } from '../src/index.ts';
 import { agentKeys, deliver, delivery, fakeAi, until, type Route } from './helpers.ts';
 
@@ -201,7 +202,8 @@ test('what a task prints carries its id, and each task ends with a line of its o
   await give(delivery('broken', {}, { id: 'tsk_2' }));
   await resultOf(ai, 'tsk_2');
   await until(() => lines.length >= 2);
-  assert.deepEqual(out, ['[tsk_1] looking up the catalog for demo-shop\n', "[tsk_1] { step: 'catalog' }\n", '[tsk_1] still tsk_1 tsk_1\n'], 'a format string keeps its place; after an await it still knows its task');
+  // console colours what it prints when the output is a terminal: the words are what this checks, not the colours
+  assert.deepEqual(out.map(stripVTControlCharacters), ['[tsk_1] looking up the catalog for demo-shop\n', "[tsk_1] { step: 'catalog' }\n", '[tsk_1] still tsk_1 tsk_1\n'], 'a format string keeps its place; after an await it still knows its task');
   assert.match(lines.find((line) => line.startsWith('tsk_1')) ?? '', /^tsk_1 reply done in \d+\.\d s$/);
   assert.equal(lines.find((line) => line.startsWith('tsk_2')), 'tsk_2 broken failed: the shop API is down');
   assert.equal(currentTask(), null, 'outside a task, no task');

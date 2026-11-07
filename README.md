@@ -30,6 +30,7 @@
   <a href="#one-agent-many-users-at-once">Many users</a> ·
   <a href="#you-with-your-token">Your token</a> ·
   <a href="#traces">Traces</a> ·
+  <a href="#license">License</a> ·
   <a href="https://spredr.cloud/pricing">Pricing</a>
 </p>
 
@@ -449,6 +450,13 @@ See [spredr.cloud/pricing](https://spredr.cloud/pricing).
 
 It is plain HTTP and works from any language: signed requests one way, signed callbacks the other. The SDK has no
 dependencies; write to us if you need the protocol for another language.
+
+## License
+
+Free to use, copy and adapt **to work with spredr**: in your own agents and backends, commercial ones included. It is
+not open source: you may not publish it on its own or as a fork, or use it with a service other than spredr. The full
+text is the `LICENSE` file inside this package (© 2026 Candhrly, LLC); the spredr name and logo are covered by
+`TRADEMARKS.md`, next to it.
 
 ---
 

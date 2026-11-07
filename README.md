@@ -1,5 +1,10 @@
 <p align="center">
-  <a href="https://spredr.cloud"><img src="https://spredr.cloud/branding/banner/github-social-dark-1280x640.png" alt="spredr: put your backends online" width="720"></a>
+  <a href="https://spredr.cloud">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="https://spredr.cloud/branding/banner/github-social-1280x640.png">
+      <img src="https://spredr.cloud/branding/banner/github-social-dark-1280x640.png" alt="spredr: put your backends online" width="720">
+    </picture>
+  </a>
 </p>
 
 <h1 align="center">@spredr/sdk</h1>
@@ -12,10 +17,12 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@spredr/sdk"><img src="https://img.shields.io/npm/v/@spredr/sdk?color=C2410C&label=npm" alt="npm version"></a>
   <img src="https://img.shields.io/badge/dependencies-0-14161C" alt="no dependencies">
-  <img src="https://img.shields.io/badge/node-%E2%89%A520-14161C" alt="Node 20 or newer">
+  <img src="https://img.shields.io/badge/node-%E2%89%A522.12-14161C" alt="Node 22.12 or newer">
 </p>
 
 <p align="center">
+  <a href="#what-it-is">What it is</a> ·
+  <a href="#what-you-need">What you need</a> ·
   <a href="#why-spredr-for-your-agents">Why</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#the-agent">The agent</a> ·
@@ -27,6 +34,34 @@
 </p>
 
 ---
+
+## What it is
+
+`@spredr/sdk` is how you build an AI agent as an ordinary Node service and run it on [spredr](https://spredr.cloud).
+Your code says what the agent does, and calls the model you choose (Claude, OpenAI, Gemini or your own) with your own
+key. spredr runs it like any other backend and adds what an agent needs to be trusted with real work:
+
+- it hands the agent **tasks**, with every user taking turns so a busy one never holds the others back, and keeps a
+  journal so a task that comes back never does a step twice;
+- it **holds a risky action** (a refund, an email, a booking) until a person says yes;
+- it keeps a **memory per customer**, and turns your corrections into lessons;
+- it shows **every step**, with its tokens and cost.
+
+The same package is used from three places: inside the agent (`Agent`), in your backend to give it tasks (`Caller`),
+and by you to manage it (`Spredr`). [Three pieces, one agent](#three-pieces-one-agent) shows how they fit.
+
+## What you need
+
+- **A spredr account** ([spredr.cloud](https://spredr.cloud)) and its CLI: `curl -fsSL https://spredr.cloud/install | sh`,
+  then `spredr login`.
+- **Node 22.12 or newer.** The SDK has no dependencies of its own.
+- **A Git repository** (GitHub or GitLab) with the agent's code: spredr builds it and runs it as a service.
+- **A key for the model you use**, kept as a variable of that service (`spredr vars set shop-agent ANTHROPIC_API_KEY=…`).
+  spredr never calls the model for you and never sits between your agent and it.
+- **Optionally, a backend on spredr** that gives the agent its tasks with `Caller`.
+
+Nothing to copy between them: when you register the agent and link a backend, spredr writes each side's keys into its
+service's variables. The [Quick start](#quick-start) takes you from nothing to a first answer in five steps.
 
 ## Why spredr for your agents
 
@@ -47,7 +82,7 @@
 - **Yours to watch and to take.** Each task is a trace with its steps, tokens and cost, sent to your
   OpenTelemetry tools (Langfuse, Datadog, Honeycomb); every task exports as NDJSON.
 - **Built to be trusted.** Every request signed, no shared secrets, no dependencies, typed end to end, and tested:
-  61 tests over 99% of the code, plus the SDK against spredr's real agents service on every change there.
+  70 tests over 98% of the code, plus the SDK against spredr's real agents service on every change there.
 
 Agents run as your plan's services, with their tasks included: see [pricing](https://spredr.cloud/pricing).
 

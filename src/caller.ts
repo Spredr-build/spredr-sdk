@@ -33,11 +33,13 @@ function need(value: string | undefined, name: string): string {
 /** A backend linked to one agent. With no options it reads the variables spredr writes into a linked service; give it
  *  the agent's kinds (`new Caller<KindsOf<typeof assistant>>()`) and TypeScript checks every name, input and result. */
 export class Caller<K extends Kinds = AnyKinds> extends Tasks<K> {
+  #id: string;
   #verify: ((request: Incoming) => boolean) | null;
 
   constructor(options: Partial<CallerOptions> = {}) {
     const { id, key, agent, ai, aiKey, ...clientOptions } = options;
     super(client(need(ai, 'SPREDR_AI_URL'), { from: need(id, 'SPREDR_CALLER_ID'), key: privateKeyOf(need(key, 'SPREDR_CALLER_KEY')) }, clientOptions), need(agent, 'SPREDR_AGENT'));
+    this.#id = need(id, 'SPREDR_CALLER_ID');
     const checkWith = aiKey || process.env.SPREDR_AI_KEY;
     this.#verify = checkWith ? aiVerifier(checkWith) : null;
   }
@@ -54,6 +56,9 @@ export class Caller<K extends Kinds = AnyKinds> extends Tasks<K> {
     const text = typeof request.body === 'string' ? request.body : Buffer.from(request.body).toString('utf8');
     const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== 'object' || parsed === null || !('event' in parsed) || !('task' in parsed)) return null;
+    // signed by ai, but for another caller: someone forwarded a callback ai sent them
+    const to = 'to' in parsed && typeof parsed.to === 'object' && parsed.to !== null && 'caller' in parsed.to ? parsed.to.caller : undefined;
+    if (to !== undefined && to !== this.#id) return null;
     // signed by ai: its shape is ai's own
     return parsed as Callback;
   }

@@ -90,6 +90,7 @@ const need = (value: string | undefined, name: string): string => {
 /** An agent. K starts empty and each on() adds its kind, which is what KindsOf reads. */
 export class Agent<K extends Kinds = {}> {
   #manifest: Manifest;
+  #id: string;
   #client: Client;
   #verify: ReturnType<typeof aiVerifier>;
   #handlers = new Map<string, Run>();
@@ -105,7 +106,8 @@ export class Agent<K extends Kinds = {}> {
     if (tagLogs !== false) tagConsole();
     this.#manifest = manifest;
     const clientOptions = { ...(fetch ? { fetch } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(maxRetries === undefined ? {} : { maxRetries }), ...(retryDelayMs === undefined ? {} : { retryDelayMs }) };
-    this.#client = client(need(ai, 'SPREDR_AI_URL'), { from: need(id, 'SPREDR_AGENT_ID'), key: privateKeyOf(need(key, 'SPREDR_AGENT_KEY')) }, clientOptions);
+    this.#id = need(id, 'SPREDR_AGENT_ID');
+    this.#client = client(need(ai, 'SPREDR_AI_URL'), { from: this.#id, key: privateKeyOf(need(key, 'SPREDR_AGENT_KEY')) }, clientOptions);
     this.#verify = aiVerifier(need(aiKey, 'SPREDR_AI_KEY'));
     this.#log = log === false ? () => undefined : log ?? ((line) => console.log(`spredr agent · ${line}`));
     this.#graceMs = shutdownGraceMs ?? SHUTDOWN_GRACE_MS;
@@ -177,6 +179,8 @@ export class Agent<K extends Kinds = {}> {
     if (this.#closing) return json(503, { error: 'this agent is closing' });
     // ai's own JSON, checked by its signature
     const delivery = JSON.parse(typeof request.body === 'string' ? request.body : Buffer.from(request.body).toString('utf8')) as Delivery;
+    // signed by ai, but for another agent: someone forwarded a task ai gave them (it would run with this agent's tools)
+    if (delivery.to && delivery.to.agent !== this.#id) return json(403, { error: 'this task is addressed to another agent' });
     const handler = this.#handlers.get(delivery.task.kind);
     if (!handler) return json(200, { error: `this agent does not handle «${delivery.task.kind}» tasks` });
     const running = this.#run(handler, delivery).finally(() => this.#running.delete(running));

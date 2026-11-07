@@ -85,3 +85,15 @@ test('its requests are signed with its own key: its public half checks them, no 
   assert.equal(aiVerifier(mine.publicKey)(asChecked), true);
   assert.equal(aiVerifier(newKeys().publicKey)(asChecked), false);
 });
+
+test('attack: a genuine ai-signed callback forwarded from another caller is not taken', async () => {
+  const { Caller, newKeys } = await import('../src/index.ts');
+  const { signedHeaders, privateKeyOf } = await import('../src/sign.ts');
+  const ai = newKeys();
+  const mine = newKeys();
+  const caller = new Caller({ id: 'cl_mine', key: mine.privateKey, ai: 'https://api.spredr.cloud/ai', aiKey: ai.publicKey, agent: 'shop' });
+  const signedBody = (body: object) => { const text = JSON.stringify(body); return { method: 'POST', path: '/hooks/spredr', headers: signedHeaders('ai', privateKeyOf(ai.privateKey), 'POST', '/hooks/spredr', text), body: Buffer.from(text) }; };
+  const task = { id: 'tsk_1', state: 'done' };
+  assert.equal(caller.callback(signedBody({ to: { caller: 'cl_other' }, event: 'done', task })), null);
+  assert.notEqual(caller.callback(signedBody({ to: { caller: 'cl_mine' }, event: 'done', task })), null);
+});

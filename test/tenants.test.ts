@@ -120,3 +120,14 @@ test('inside your own server: handle() takes only signed tasks on its path, star
   assert.equal(late.status, 503);
   assert.equal(ran, 1);
 });
+
+test('attack: a genuine ai-signed task forwarded from another agent is refused, never run with this agent\'s tools', async (t) => {
+  let ran = 0;
+  const { agent, signed } = mounted(t, { refund: async () => { ran += 1; return 'refunded'; } });
+  const forwarded = await agent.handle(signed({ to: { agent: 'ag_attacker' }, ...delivery('refund', { order: 123 }) }));
+  assert.equal(forwarded.status, 403);
+  assert.match(String(forwarded.body), /addressed to another agent/);
+  assert.equal((await agent.handle(signed({ to: { agent: 'ag_test' }, ...delivery('refund', { order: 123 }, { id: 'tsk_own' }) }))).status, 202, 'its own still runs');
+  await new Promise((done) => setTimeout(done, 20));
+  assert.equal(ran, 1);
+});

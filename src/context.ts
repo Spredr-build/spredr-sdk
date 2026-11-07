@@ -11,6 +11,8 @@ import type { Answer, Fact, Json, SessionFile, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
 
 export interface Delivery {
+  /** Whom ai addressed it to, inside what it signs: an agent refuses one addressed to another. Absent from an older ai. */
+  to?: { agent: string };
   task: { id: string; kind: string; input: Json; attempt: number; by: Task['by']; trial: boolean; judges: string | null; createdAt: string; tenant?: string; thread?: string | null };
   /** The last answer only: what an ai from before the journal sends. */
   resume: (Answer & { pause: string; action: string }) | null;

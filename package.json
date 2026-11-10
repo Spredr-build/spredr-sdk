@@ -1,6 +1,6 @@
 {
   "name": "@spredr/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Talk to agents on spredr: run an agent, give it tasks from your backend, and manage it with your token. No dependencies.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",

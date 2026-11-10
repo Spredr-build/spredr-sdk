@@ -1,7 +1,7 @@
 # Trademarks
 
 **spredr**, the spredr logo (the three leaning bars, «Sesgo») and the rest of the spredr brand are trademarks of
-**Candhrly, LLC**. The [SDK's license](LICENSE) covers its code. It does not grant any right to the name, the logo
+**Candhrly, LLC**. The [SDK's license](https://unpkg.com/@spredr/sdk/LICENSE) covers its code. It does not grant any right to the name, the logo
 or the brand.
 
 **You may**

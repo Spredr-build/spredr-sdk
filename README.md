@@ -18,6 +18,7 @@
   <a href="https://www.npmjs.com/package/@spredr/sdk"><img src="https://img.shields.io/npm/v/@spredr/sdk?color=C2410C&label=npm" alt="npm version"></a>
   <img src="https://img.shields.io/badge/dependencies-0-14161C" alt="no dependencies">
   <img src="https://img.shields.io/badge/node-%E2%89%A522.12-14161C" alt="Node 22.12 or newer">
+  <a href="https://unpkg.com/@spredr/sdk/LICENSE"><img src="https://img.shields.io/badge/license-spredr%20SDK%20License-14161C" alt="License: spredr SDK License"></a>
 </p>
 
 <p align="center">
@@ -516,13 +517,13 @@ dependencies; write to us if you need the protocol for another language.
 
 Free to use, copy and adapt **to work with spredr**: in your own agents and backends, commercial ones included. It is
 not open source: you may not publish it on its own or as a fork, or use it with a service other than spredr. The full
-text is the `LICENSE` file inside this package (© 2026 Candhrly, LLC); the spredr name and logo are covered by
-`TRADEMARKS.md`, next to it.
+text is the [spredr SDK License](https://unpkg.com/@spredr/sdk/LICENSE), the `LICENSE` file inside this package (© 2026 Candhrly, LLC); the spredr name
+and logo are covered by [`TRADEMARKS.md`](https://unpkg.com/@spredr/sdk/TRADEMARKS.md), next to it.
 
 ---
 
 <p align="center">
   <a href="https://spredr.cloud"><img src="https://spredr.cloud/branding/icon/icon-192.png" alt="spredr" width="56"></a><br>
-  <sub><a href="https://spredr.cloud">spredr.cloud</a> · © 2026 Candhrly, LLC · <a href="LICENSE">license</a></sub><br>
+  <sub><a href="https://spredr.cloud">spredr.cloud</a> · © 2026 Candhrly, LLC · <a href="https://unpkg.com/@spredr/sdk/LICENSE">license</a></sub><br>
   <sub>Free to use with spredr. spredr and its logo are trademarks of Candhrly, LLC.</sub>
 </p>

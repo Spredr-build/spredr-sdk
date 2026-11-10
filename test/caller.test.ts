@@ -16,8 +16,8 @@ const caller = (route?: Route) => {
 test('each call goes to its path with its method and body', async () => {
   const at = new Date('2026-12-01T10:00:00Z');
   const cases: [string, (shop: Caller) => Promise<unknown>, string, string, unknown][] = [
-    ['ask', (shop) => shop.ask('reply', { text: 'hola' }, { key: 'msg-1', wait: 300, at, thread: 'customer:ana' }), 'POST', '/agents/shop/tasks',
-      { kind: 'reply', input: { text: 'hola' }, key: 'msg-1', wait: 60, at: '2026-12-01T10:00:00.000Z', thread: 'customer:ana' }],
+    ['ask', (shop) => shop.ask('reply', { text: 'hola' }, { key: 'msg-1', wait: 300, at, thread: 'customer:ana', title: 'Pregunta de Ana' }), 'POST', '/agents/shop/tasks',
+      { kind: 'reply', input: { text: 'hola' }, key: 'msg-1', wait: 60, at: '2026-12-01T10:00:00.000Z', thread: 'customer:ana', title: 'Pregunta de Ana' }],
     ['ask, bare', (shop) => shop.ask('reply', 'hola'), 'POST', '/agents/shop/tasks', { kind: 'reply', input: 'hola' }],
     ['get', (shop) => shop.get('tsk_1'), 'GET', '/tasks/tsk_1', undefined],
     ['list', (shop) => shop.list({ status: 'failed', limit: 5, thread: 'customer:ana' }), 'GET', '/agents/shop/tasks?status=failed&limit=5&thread=customer%3Aana', undefined],

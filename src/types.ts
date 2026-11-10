@@ -30,6 +30,8 @@ export interface Task<Result = Json> {
   thread: string | null;
   /** Whom the agent worked for in it ("" is no one in particular). */
   tenant: string;
+  /** What its asker called it ("" when it named none). */
+  title: string;
   trial: boolean;
   createdAt: string;
   startedAt: string | null;
@@ -151,6 +153,8 @@ export interface AskOptions {
   /** Whom the agent works for in it (a user, an account, a team, a business): its memory, freedom, lessons and caps are that tenant's.
    *  A tenant session (`caller.for(tenant)`) sets it for you. */
   tenant?: string;
+  /** What you call this task, so its owner tells it apart in the panel: «Refund for order 1042». One line, up to 120. */
+  title?: string;
 }
 
 /** One step inside a task: a model call, a tool, a memory read. Its trace and its costs come from these. */
@@ -161,8 +165,13 @@ export interface Step {
   at?: number;
   detail?: string;
   model?: string;
+  /** Input tokens billed in full: without the ones read from or written to the prompt cache. */
   tokensIn?: number;
   tokensOut?: number;
+  /** Input tokens read from the model's prompt cache, and written to it. */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** What the call cost. Absent: spredr prices its tokens at its model's list price and marks it as an estimate. */
   costUsd?: number;
   ok?: boolean;
 }
@@ -181,6 +190,17 @@ export interface Summary {
   failedPerHour: number[];
   tools: { name: string; uses: number }[];
   freedom: { alone: number; asked: number; undone: number };
+  /** The model its steps name most in those hours ('' when they name none). */
+  model?: string;
+  /** What a finished task cost, the typical one and the 95th percentile: past it a task is marked costly. */
+  costP50?: number | null;
+  costP95?: number | null;
+  /** Some of the cost is spredr's estimate from tokens, not the agent's own figure. */
+  costEstimated?: boolean;
+  /** Model calls of a model spredr has no price for, that came without a cost. */
+  unpriced?: number;
+  /** Who gave it work: owner, caller, schedule, hook, agent. */
+  origins?: string[];
 }
 
 export interface Thread {

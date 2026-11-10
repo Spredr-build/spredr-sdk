@@ -167,6 +167,19 @@ const { text } = await ctx.model(() => generateText({ model: google('gemini-2.5-
 const out = await ctx.track('model', 'my-model', () => myModel.run(question), (result) => ({ model: 'my-model', tokensIn: result.inputTokens, tokensOut: result.outputTokens }));
 ```
 
+<a id="costs"></a>**What it costs.** Each model call shows its cost in the panel, beside the task that made it. `ctx.model()`
+also reads the tokens served from the model's prompt cache and the ones written to it, so each part is priced at its
+own rate: input billed in full, cache writes, cache reads and output. When your code sends no `costUsd`, spredr prices
+the tokens at the model's list price, the way agent observability tools price a trace, and marks the figure as an
+estimate. Your own `costUsd` always wins: send it when you pay a different price (a cloud's rate, a discount, a batch).
+A model spredr has no price for shows «no price» rather than $0, until you send its cost. The spend limit
+(`spendPerDayUsd`) counts estimates too, so it holds for an agent that never says what it spent.
+
+<a id="slow-and-costly"></a>**Slow and costly.** In the panel, a task past what 95 % of its agent's tasks took in the last
+day is marked slow, and one past what 95 % cost is marked costly: the 95th percentile, the usual line for an outlier.
+It compares an agent with itself, since a support agent and a code reviewer cost very different things. The marks
+appear once the agent has 20 finished tasks in that day; with fewer there is nothing to compare against.
+
 **3. Deploy it and make it an agent**
 
 Push it to a repo, then:
@@ -260,13 +273,14 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | `ctx.model(() => call)` | A model call, timed and reported with its model and tokens, read from the answer of Claude, OpenAI or the AI SDK. |
 | `ctx.track(kind, name, work, usage?)` | Times any other step (`tool`, `memory`, `other`) and reports it: a charge, an email, a call to your API. Steps are the task's trace, its cost and its timeline. |
 | `ctx.later(kind, input, at)` | A task for later: a reminder, a follow-up, for the same tenant and thread. |
+| `ctx.delegate(agent, kind, input?, { title?, key? })` | Hands a part of this task to another of your agents and waits for its result (a `PartError` when it failed or was canceled). Several at once with `Promise.all`. You allow it in that agent's settings (whom it may ask, how many at once, how long a chain may grow); the panel draws the chain. |
 | `ctx.tenant`, `ctx.thread` | Whom this task works for (a user, an account, a team, a business; `""` when no one in particular) and its conversation. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
 | `ctx.stream(text)` | The next piece of its answer, for a caller watching live (`live()` or `stream(id)`). Sent in order, a few at a time, and the last pieces before its result. A view: the result is what stays. |
 
 **Nothing happens twice.** When a task comes back (after a question, or given again after a crash), its handler runs
 from the top, but everything it already did through `ctx` gives back what it gave the first time instead of happening
-again: each answered question, each `ctx.model`, `ctx.track`, `ctx.memory.remember` and `ctx.later`. The model is not
+again: each answered question, each `ctx.model`, `ctx.track`, `ctx.memory.remember`, `ctx.later` and `ctx.delegate` (the same part, not a new one). The model is not
 paid twice and a customer is not charged twice. So put side effects in `ctx.track`; only code outside `ctx` runs again.
 If the handler takes another way than before (another question, another step), it runs for real from there on. What a
 step gives back comes back as JSON (a `Date` comes back as its text), up to 256 KB; a bigger one simply runs again.
@@ -318,7 +332,8 @@ import { Caller } from '@spredr/sdk';
 // reads the variables spredr wrote into this service
 const agent = new Caller();
 
-const task = await agent.run('reply', { customer: 'ana', text: 'hola' }, { key: messageId, thread: 'customer:ana' });
+// title: what the owner reads in the panel for this task («Refund for order 1042»); optional, one line
+const task = await agent.run('reply', { customer: 'ana', text: 'hola' }, { key: messageId, thread: 'customer:ana', title: 'Pregunta de Ana' });
 
 if (task.status === 'paused') {
   // show it in your app

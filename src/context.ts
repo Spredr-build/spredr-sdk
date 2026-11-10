@@ -6,6 +6,7 @@
 // no other's. A task it schedules (ctx.later) is for the same tenant and thread.
 
 import type { Client } from './http.ts';
+import { PartError, RateLimitError } from './errors.ts';
 import { query } from './http.ts';
 import type { Answer, Fact, Json, SessionFile, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
@@ -60,12 +61,19 @@ export interface Context {
   /** Runs `work`, times it, and reports it as a step (failed when it throws). Tokens and cost from what it returns, if
    *  `usage` reads them. Done once per task: when the task runs again (after a question, a retry) it gives back what
    *  `work` gave the first time, as JSON, without running it. Put side effects here so they never happen twice. */
-  track<T>(kind: Step['kind'], name: string, work: () => Promise<T>, usage?: (value: T) => Pick<Step, 'model' | 'tokensIn' | 'tokensOut' | 'costUsd' | 'detail'>): Promise<T>;
+  track<T>(kind: Step['kind'], name: string, work: () => Promise<T>, usage?: (value: T) => Pick<Step, 'model' | 'tokensIn' | 'tokensOut' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd' | 'detail'>): Promise<T>;
   /** A model call, timed and reported with its model and tokens read from the answer (Claude, OpenAI, the AI SDK):
    *  `await ctx.model(() => claude.messages.create({ … }))`. `name` defaults to the model. Done once per task, as track. */
   model<T>(work: () => Promise<T>, name?: string): Promise<T>;
   /** A task for later (a reminder, a follow-up), for the same tenant and thread. Done once per task, as track. */
   later(kind: string, input: Json, at: Date | string, key?: string): Promise<void>;
+  /** Hands a part of this task to another of your agents (by name) and waits for what it gives back: its result, or a
+   *  PartError when it failed or was canceled. The part is that agent's own task, for the same tenant and thread, and
+   *  the panel draws it under this one. Your owner says in each agent's settings whom it may ask, how many parts at
+   *  once (past that, the next waits its turn here) and how long a chain may grow. Asked once: when this task runs
+   *  again, the same call gives back the same part (its key is the agent, the kind and how many such parts came
+   *  before; pass `key` to name it yourself). Several at once: `await Promise.all([ctx.delegate(…), ctx.delegate(…)])`. */
+  delegate<T = Json>(agent: string, kind: string, input?: Json, options?: { title?: string; key?: string }): Promise<T>;
   /** Its session's files (the thread's, for its tenant): whatever its caller left for it to read, without their bytes. */
   files: SessionFile[];
   /** One of them, by id or by name, as its bytes and type: read inside this task, the way its code wants. */
@@ -99,6 +107,17 @@ function memoOf(value: unknown): { value?: Json } | undefined {
     return undefined;
   }
 }
+
+/** How long one ask for a part waits on ai (the agent's heartbeat keeps the task's place meanwhile), how long between
+ *  asks while a part waits for a person's answer, and how long before asking again for a turn past the parallel cap. */
+const PART_WAIT_SECONDS = 25;
+const PART_PAUSED_MS = 5_000;
+const PART_TURN_MS = 2_000;
+const PART_KEY_MAX = 64;
+/** A part's key from the call: only what ai accepts in a key. */
+const partKey = (text: string): string => text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, PART_KEY_MAX);
+const pause = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
+interface Part { id: string; agent: string; kind: string; status: string; result: Json; error: string }
 
 /** How long live text gathers before it is sent, and how much makes it go at once. */
 const STREAM_FLUSH_MS = 150;
@@ -163,6 +182,8 @@ export function contextFor(client: Client, delivery: Delivery): Context {
 
   const tenant = task.tenant ?? '';
   const thread = task.thread ?? null;
+  // parts asked so far in this run, per agent and kind: the same call in the same place gets the same key every run
+  const partsSeen = new Map<string, number>();
   return {
     task, tenant, thread, lessons: delivery.lessons.items, trial: task.trial,
     async ask(action, question, extra = {}) {
@@ -201,6 +222,30 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     later: (kind, input, at, key) => once('other', `later:${kind}`, `later ${kind}`, async () => {
       await call('POST', '/agent/tasks', { kind, input, at: new Date(at).toISOString(), ...(key ? { key } : {}), ...(tenant ? { tenant } : {}), ...(thread ? { thread } : {}) }, { idempotent: Boolean(key) });
     }, () => ({})),
+    async delegate<T>(agent: string, kind: string, input: Json = null, options: { title?: string; key?: string } = {}): Promise<T> {
+      if (task.trial) throw new Error('A trial does nothing real: it cannot hand parts to other agents.');
+      const seen = partsSeen.get(`${agent}\u0000${kind}`) ?? 0;
+      partsSeen.set(`${agent}\u0000${kind}`, seen + 1);
+      const key = partKey(options.key ?? `${agent}.${kind}.${seen + 1}`);
+      // asked once (the key); past the owner's number at once, it waits its turn here
+      let part: Part;
+      for (;;) {
+        try {
+          part = (await call<{ part: Part }>('POST', `${path}/parts`, { attempt: task.attempt, agent, kind, input, key, ...(options.title ? { title: options.title } : {}) }, { idempotent: true })).part;
+          break;
+        } catch (error) {
+          if (!(error instanceof RateLimitError)) throw error;
+          await pause(PART_TURN_MS);
+        }
+      }
+      // then it waits: each ask holds on ai for a while; a part waiting for a person's answer is asked less often
+      while (part.status === 'queued' || part.status === 'running' || part.status === 'paused') {
+        if (part.status === 'paused') await pause(PART_PAUSED_MS);
+        part = (await call<{ part: Part }>('GET', `${path}/parts/${encodeURIComponent(part.id)}${query({ attempt: task.attempt, wait: part.status === 'paused' ? 0 : PART_WAIT_SECONDS })}`)).part;
+      }
+      if (part.status === 'done') return part.result as T;
+      throw new PartError(part.agent || agent, part.id, part.status, part.error);
+    },
     files: delivery.files ?? [],
     async file(idOrName) {
       const found = (delivery.files ?? []).find((one) => one.id === idOrName || one.name === idOrName);

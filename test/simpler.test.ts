@@ -41,6 +41,12 @@ test('usageOf reads the model and tokens from Claude, OpenAI and the AI SDK; any
   assert.deepEqual(usageOf({ model: 'claude-haiku-5-5', usage: { input_tokens: 120, output_tokens: 30 } }), { model: 'claude-haiku-5-5', tokensIn: 120, tokensOut: 30 });
   assert.deepEqual(usageOf({ model: 'gpt-x', usage: { prompt_tokens: 10, completion_tokens: 4 } }), { model: 'gpt-x', tokensIn: 10, tokensOut: 4 });
   assert.deepEqual(usageOf({ usage: { inputTokens: 7, outputTokens: 3 }, response: { modelId: 'claude-sonnet-5-5' } }), { model: 'claude-sonnet-5-5', tokensIn: 7, tokensOut: 3 });
+  // the prompt cache, each part apart: Claude counts it beside input_tokens, OpenAI and the AI SDK inside it
+  assert.deepEqual(usageOf({ model: 'claude-opus-5-5', usage: { input_tokens: 50, output_tokens: 9, cache_read_input_tokens: 4000, cache_creation_input_tokens: 600 } }),
+    { model: 'claude-opus-5-5', tokensIn: 50, tokensOut: 9, cacheReadTokens: 4000, cacheWriteTokens: 600 });
+  assert.deepEqual(usageOf({ model: 'gpt-x', usage: { prompt_tokens: 1000, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 800 } } }), { model: 'gpt-x', tokensIn: 200, tokensOut: 4, cacheReadTokens: 800 });
+  assert.deepEqual(usageOf({ model: 'gpt-x', usage: { input_tokens: 900, output_tokens: 2, input_tokens_details: { cached_tokens: 900 } } }), { model: 'gpt-x', tokensIn: 0, tokensOut: 2, cacheReadTokens: 900 });
+  assert.deepEqual(usageOf({ usage: { inputTokens: 70, outputTokens: 3, cachedInputTokens: 60 }, response: { modelId: 'm' } }), { model: 'm', tokensIn: 10, tokensOut: 3, cacheReadTokens: 60 });
   assert.deepEqual(usageOf({ usage: { promptTokens: 5, completionTokens: 2 } }), { tokensIn: 5, tokensOut: 2 });
   assert.deepEqual(usageOf('text'), {});
   assert.deepEqual(usageOf({ usage: { input_tokens: 'many' } }), {});

@@ -9,7 +9,7 @@ export { Agent, type AgentAnswer, type AgentOptions, type Context, type Delivery
 export { Caller, type Callback, type CallerOptions } from './caller.ts';
 export {
   AuthenticationError, BadRequestError, ConflictError, ConnectionError, InternalServerError, NotFoundError, PermissionDeniedError, RateLimitError,
-  SpredrError, TaskError, TimeoutError,
+  PartError, SpredrError, TaskError, TimeoutError,
 } from './errors.ts';
 export type { CallOptions, ClientOptions } from './http.ts';
 export { DEFAULT_AI_URL, OwnedAgent, Spredr, type SpredrOptions } from './owner.ts';

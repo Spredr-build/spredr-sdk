@@ -55,6 +55,22 @@ export class TaskError extends Error {
   }
 }
 
+/** A part handed to another agent (ctx.delegate) that ended without a result: it failed, or it was canceled. */
+export class PartError extends Error {
+  /** The agent asked, the part's id, and how it ended. */
+  readonly agent: string;
+  readonly part: string;
+  readonly status: string;
+
+  constructor(agent: string, part: string, status: string, error: string) {
+    super(status === 'failed' ? `${agent} could not do its part: ${error || 'it failed'}.` : `${agent}'s part was ${status}.`);
+    this.name = 'PartError';
+    this.agent = agent;
+    this.part = part;
+    this.status = status;
+  }
+}
+
 const BY_STATUS = new Map<number, typeof SpredrError>([[400, BadRequestError], [401, AuthenticationError], [403, PermissionDeniedError], [404, NotFoundError], [409, ConflictError]]);
 
 /** The error for ai's answer: its status picks the class. */

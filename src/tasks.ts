@@ -32,7 +32,7 @@ export class Tasks<K extends Kinds = AnyKinds> {
     const tenant = options.tenant ?? this.#tenant;
     const body = {
       kind, input, ...(options.key ? { key: options.key } : {}), ...(options.wait ? { wait: Math.min(options.wait, MAX_WAIT_S) } : {}),
-      ...(options.at ? { at: new Date(options.at).toISOString() } : {}), ...(options.thread ? { thread: options.thread } : {}), ...(tenant ? { tenant } : {}),
+      ...(options.at ? { at: new Date(options.at).toISOString() } : {}), ...(options.thread ? { thread: options.thread } : {}), ...(tenant ? { tenant } : {}), ...(options.title ? { title: options.title } : {}),
     };
     return (await this.#client.call<{ task: Task<K[Name]['output']> }>('POST', `/agents/${encodeURIComponent(this.#agent)}/tasks`, body, { idempotent: Boolean(options.key) })).task;
   }

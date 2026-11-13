@@ -41,6 +41,10 @@ test('each owner call goes to its path with its method and body, carrying the to
     ['version', (_, shop) => shop.version(3, 'rollback'), 'POST', '/agents/shop/versions/3', { action: 'rollback' }],
     ['tasks', (_, shop) => shop.tasks.list(), 'GET', '/agents/shop/tasks', undefined],
     ['export', (_, shop) => shop.export(since), 'GET', '/agents/shop/export?since=2026-11-01T00%3A00%3A00.000Z', undefined],
+    // attack: an id stays in its own segment, never steering the owner's token to another route
+    ['removeCaller ../', (_, shop) => shop.removeCaller('../rotate?'), 'DELETE', '/agents/shop/callers/..%2Frotate%3F', undefined],
+    ['editFact ../', (_, shop) => shop.editFact('../../x?', 'y'), 'PATCH', '/agents/shop/memory/..%2F..%2Fx%3F', { text: 'y' }],
+    ['decide ../', (_, shop) => shop.decide('../x?', 'accept'), 'POST', '/agents/shop/lessons/..%2Fx%3F', { decision: 'accept' }],
   ];
   for (const [what, call, method, path, body] of cases) {
     const ai = fakeAi((request) => (request.path.includes('/export') ? { text: '' } : { body: ANY }));

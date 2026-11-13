@@ -136,6 +136,8 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
       await ctx.memory.remember('customer:ana', 'Asked about Sunday', { key: 'last' });
       const facts = await ctx.memory.recall({ scope: 'customer:ana', q: 'sunday' });
       await ctx.memory.forget('ft_9');
+      // attack: an id the model was talked into never turns into another tenant's query
+      await ctx.memory.forget('ft_9?tenant=shop_a&');
       await ctx.later('follow-up', { customer: 'ana' }, new Date('2026-12-01T09:00:00Z'), 'ana-follow');
       return facts.length;
     },
@@ -153,6 +155,7 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
     ['PUT', '/agent/memory', { task: 'tsk_1', scope: 'customer:ana', text: 'Asked about Sunday', key: 'last' }],
     ['GET', '/agent/memory?scope=customer%3Aana&q=sunday&task=tsk_1', undefined],
     ['DELETE', '/agent/memory/ft_9?task=tsk_1', undefined],
+    ['DELETE', '/agent/memory/ft_9%3Ftenant%3Dshop_a%26?task=tsk_1', undefined],
     ['POST', '/agent/tasks', { kind: 'follow-up', input: { customer: 'ana' }, at: '2026-12-01T09:00:00.000Z', key: 'ana-follow' }],
   ]);
   // the note, then remember and later as steps carrying their memo, so the next run does neither again

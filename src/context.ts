@@ -127,7 +127,7 @@ export function contextFor(client: Client, delivery: Delivery): Context {
   const { task } = delivery;
   const call = client.call.bind(client);
   const began = Date.now();
-  const path = `/agent/tasks/${task.id}`;
+  const path = `/agent/tasks/${encodeURIComponent(task.id)}`;
   // the live text: gathered, and sent one piece after another, so they arrive in the order written
   let pending = '';
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -264,7 +264,7 @@ export function contextFor(client: Client, delivery: Delivery): Context {
         return (await call<{ facts: Fact[] }>('GET', `/agent/memory${query({ ...options, task: task.id })}`)).facts;
       },
       async forget(id) {
-        await call('DELETE', `/agent/memory/${id}${query({ task: task.id })}`);
+        await call('DELETE', `/agent/memory/${encodeURIComponent(id)}${query({ task: task.id })}`);
       },
     },
   };

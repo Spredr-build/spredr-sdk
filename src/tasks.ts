@@ -53,7 +53,7 @@ export class Tasks<K extends Kinds = AnyKinds> {
   }
 
   async get<Result = Json>(id: string, wait = 0): Promise<Task<Result>> {
-    return (await this.#client.call<{ task: Task<Result> }>('GET', `/tasks/${id}${query({ wait: wait || undefined })}`)).task;
+    return (await this.#client.call<{ task: Task<Result> }>('GET', `/tasks/${encodeURIComponent(id)}${query({ wait: wait || undefined })}`)).task;
   }
 
   /** Waits for a task to leave the line: done, failed, canceled or paused. */
@@ -71,16 +71,16 @@ export class Tasks<K extends Kinds = AnyKinds> {
 
   /** What happened to a task after `after` (its events' seq); with `wait` seconds, waits for the first new one. */
   async events(id: string, after = 0, wait = 0): Promise<TaskEvent[]> {
-    return (await this.#client.call<{ events: TaskEvent[] }>('GET', `/tasks/${id}/events${query({ after: after || undefined, wait: wait || undefined })}`)).events;
+    return (await this.#client.call<{ events: TaskEvent[] }>('GET', `/tasks/${encodeURIComponent(id)}/events${query({ after: after || undefined, wait: wait || undefined })}`)).events;
   }
 
   /** What the agent did inside a task, step by step: its trace. */
   async steps(id: string): Promise<(Step & { seq: number; at: string })[]> {
-    return (await this.#client.call<{ steps: (Step & { seq: number; at: string })[] }>('GET', `/tasks/${id}/steps`)).steps;
+    return (await this.#client.call<{ steps: (Step & { seq: number; at: string })[] }>('GET', `/tasks/${encodeURIComponent(id)}/steps`)).steps;
   }
 
   async cancel(id: string): Promise<Task> {
-    return (await this.#client.call<{ task: Task }>('POST', `/tasks/${id}/cancel`, {})).task;
+    return (await this.#client.call<{ task: Task }>('POST', `/tasks/${encodeURIComponent(id)}/cancel`, {})).task;
   }
 
   /** The questions waiting for an answer (a tenant's alone, in a tenant session). */
@@ -89,12 +89,12 @@ export class Tasks<K extends Kinds = AnyKinds> {
   }
 
   async answer(pauseId: string, answer: Answer): Promise<Pause> {
-    return (await this.#client.call<{ pause: Pause }>('POST', `/pauses/${pauseId}/answer`, answer)).pause;
+    return (await this.#client.call<{ pause: Pause }>('POST', `/pauses/${encodeURIComponent(pauseId)}/answer`, answer)).pause;
   }
 
   /** How a finished task went: what the agent learns from. A bad one also takes back what it did alone. */
   async feedback(id: string, verdict: 'good' | 'bad', details: { correction?: Json; note?: string } = {}): Promise<Feedback> {
-    return (await this.#client.call<{ feedback: Feedback }>('POST', `/tasks/${id}/feedback`, { verdict, ...details })).feedback;
+    return (await this.#client.call<{ feedback: Feedback }>('POST', `/tasks/${encodeURIComponent(id)}/feedback`, { verdict, ...details })).feedback;
   }
 
   /** A task as it happens: each piece of its live answer (the agent's ctx.stream), each of its other events, and last the
@@ -200,6 +200,6 @@ export class Tenant<K extends Kinds = AnyKinds> extends Tasks<K> {
 
   /** Accepts or refuses a lesson the agent proposed for this tenant, or retires one. */
   async decide(lessonId: string, decision: 'accept' | 'refuse' | 'retire'): Promise<Lesson> {
-    return (await this.base.client.call<{ lesson: Lesson }>('POST', `/agents/${encodeURIComponent(this.base.agent)}/lessons/${lessonId}`, { decision })).lesson;
+    return (await this.base.client.call<{ lesson: Lesson }>('POST', `/agents/${encodeURIComponent(this.base.agent)}/lessons/${encodeURIComponent(lessonId)}`, { decision })).lesson;
   }
 }

@@ -137,7 +137,7 @@ export class OwnedAgent {
   }
 
   async removeCaller(id: string): Promise<void> {
-    await this.#client.call('DELETE', `${this.#path}/callers/${id}`);
+    await this.#client.call('DELETE', `${this.#path}/callers/${encodeURIComponent(id)}`);
   }
 
   async schedule(name: string, kind: string, cron: string, options: { tz?: string; input?: Json } = {}) {
@@ -177,7 +177,7 @@ export class OwnedAgent {
   }
 
   async editFact(id: string, text: string, data?: Json): Promise<Fact> {
-    return (await this.#client.call<{ fact: Fact }>('PATCH', `${this.#path}/memory/${id}`, { text, ...(data === undefined ? {} : { data }) })).fact;
+    return (await this.#client.call<{ fact: Fact }>('PATCH', `${this.#path}/memory/${encodeURIComponent(id)}`, { text, ...(data === undefined ? {} : { data }) })).fact;
   }
 
   /** Erases everything the agent keeps under a scope (a customer who asks to be forgotten): the agent's own, or one
@@ -204,7 +204,7 @@ export class OwnedAgent {
   }
 
   async decide(lessonId: string, decision: 'accept' | 'refuse' | 'retire'): Promise<Lesson> {
-    return (await this.#client.call<{ lesson: Lesson }>('POST', `${this.#path}/lessons/${lessonId}`, { decision })).lesson;
+    return (await this.#client.call<{ lesson: Lesson }>('POST', `${this.#path}/lessons/${encodeURIComponent(lessonId)}`, { decision })).lesson;
   }
 
   async versions(): Promise<LessonVersion[]> {
@@ -217,6 +217,6 @@ export class OwnedAgent {
   }
 
   async version(version: number, action: 'publish' | 'rollback' | 'discard'): Promise<LessonVersion> {
-    return (await this.#client.call<{ version: LessonVersion }>('POST', `${this.#path}/versions/${version}`, { action })).version;
+    return (await this.#client.call<{ version: LessonVersion }>('POST', `${this.#path}/versions/${encodeURIComponent(String(version))}`, { action })).version;
   }
 }

@@ -97,3 +97,20 @@ test('attack: a genuine ai-signed callback forwarded from another caller is not 
   assert.equal(caller.callback(signedBody({ to: { caller: 'cl_other' }, event: 'done', task })), null);
   assert.notEqual(caller.callback(signedBody({ to: { caller: 'cl_mine' }, event: 'done', task })), null);
 });
+
+test('attack: an id never leaves its own path segment: «../x?» reaches the method\'s own route, encoded, never another', async () => {
+  const { ai, shop } = caller(() => ({ body: { task: {}, events: [], steps: [], pause: {}, feedback: {}, lesson: {} } }));
+  const evil = '../agents/storio/rotate?';
+  const segment = encodeURIComponent(evil);
+  await shop.cancel(evil);
+  await shop.get(evil);
+  await shop.events(evil);
+  await shop.steps(evil);
+  await shop.feedback(evil, 'good');
+  await shop.answer(evil, { yes: true });
+  await shop.for('shop_a').decide(evil, 'accept');
+  assert.deepEqual(ai.seen.map((request) => request.path.split('?')[0]), [
+    `/tasks/${segment}/cancel`, `/tasks/${segment}`, `/tasks/${segment}/events`, `/tasks/${segment}/steps`, `/tasks/${segment}/feedback`,
+    `/pauses/${segment}/answer`, `/agents/shop/lessons/${segment}`,
+  ]);
+});

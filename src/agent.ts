@@ -211,7 +211,7 @@ export class Agent<K extends Kinds = {}> {
 
   async #run(handler: Run, delivery: Delivery): Promise<void> {
     const { task } = delivery;
-    const path = `/agent/tasks/${task.id}`;
+    const path = `/agent/tasks/${encodeURIComponent(task.id)}`;
     const beatMs = Math.max(5_000, ((this.#manifest.timeoutSeconds ?? 120) * 1000) / 3);
     // the server keeps the process alive while it listens; a beat alone never does (a task past the grace is ai's again)
     const beat = setInterval(() => void this.#client.call('POST', `${path}/progress`, { attempt: task.attempt, data: { alive: true } }).catch(() => undefined), beatMs).unref();

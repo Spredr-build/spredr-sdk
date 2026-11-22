@@ -41,6 +41,8 @@ test('each owner call goes to its path with its method and body, carrying the to
     ['version', (_, shop) => shop.version(3, 'rollback'), 'POST', '/agents/shop/versions/3', { action: 'rollback' }],
     ['tasks', (_, shop) => shop.tasks.list(), 'GET', '/agents/shop/tasks', undefined],
     ['export', (_, shop) => shop.export(since), 'GET', '/agents/shop/export?since=2026-11-01T00%3A00%3A00.000Z', undefined],
+    ['export filtered', (_, shop) => shop.export({ since, status: ['done', 'failed'], kind: ['reply'] }), 'GET', '/agents/shop/export?since=2026-11-01T00%3A00%3A00.000Z&status=done%2Cfailed&kind=reply', undefined],
+    ['setLimits data', (_, shop) => shop.setLimits({ data: { keep: 'rules', auto: true, rules: [{ path: 'input.customer', action: 'hide' }] } }), 'PUT', '/agents/shop/limits', { data: { keep: 'rules', auto: true, rules: [{ path: 'input.customer', action: 'hide' }] } }],
     // attack: an id stays in its own segment, never steering the owner's token to another route
     ['removeCaller ../', (_, shop) => shop.removeCaller('../rotate?'), 'DELETE', '/agents/shop/callers/..%2Frotate%3F', undefined],
     ['editFact ../', (_, shop) => shop.editFact('../../x?', 'y'), 'PATCH', '/agents/shop/memory/..%2F..%2Fx%3F', { text: 'y' }],
@@ -56,6 +58,13 @@ test('each owner call goes to its path with its method and body, carrying the to
     assert.deepEqual(request?.json, body, what);
     assert.equal(request?.headers.authorization, 'Bearer spr_owner', what);
   }
+});
+
+test('the export says first how many tasks it holds, with the same filter', async () => {
+  const ai = fakeAi(() => ({ body: { count: { tasks: 47 } } }));
+  const count = await new Spredr({ token: 't', ai: BASE, fetch: ai.fetch }).agent('shop').exportCount({ kind: ['reply'] });
+  assert.equal(count, 47);
+  assert.equal(ai.seen[0]?.path, '/agents/shop/export/count?kind=reply');
 });
 
 test('the export arrives one task per line, steps and all', async () => {

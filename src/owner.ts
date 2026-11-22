@@ -2,7 +2,14 @@
 
 import { client, query, type Client, type ClientOptions } from './http.ts';
 import { Tasks, type Tenant } from './tasks.ts';
-import type { AgentInfo, Fact, Freedom, Json, Lesson, LessonVersion, Limits, MemoryUse, Pause, Redeploy, SessionFile, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
+import type { AgentInfo, ExportFilter, Fact, Freedom, Json, Lesson, LessonVersion, Limits, MemoryUse, Pause, Redeploy, SessionFile, Summary, Task, TenantLimits, TenantUsage, Thread, Traces } from './types.ts';
+
+/** The export's query: a moment alone is «since», as before. */
+function exportQuery(filter: Date | string | ExportFilter | undefined): string {
+  const asked: ExportFilter = filter instanceof Date || typeof filter === 'string' ? { since: filter } : filter ?? {};
+  const moment = (value: Date | string | undefined): string | undefined => (value ? new Date(value).toISOString() : undefined);
+  return query({ since: moment(asked.since), until: moment(asked.until), status: asked.status?.join(',') || undefined, kind: asked.kind?.join(',') || undefined });
+}
 
 export interface SpredrOptions extends ClientOptions {
   /** A spredr token (spr_…), from Account › Tokens or `spredr login`; SPREDR_TOKEN when absent. */
@@ -90,10 +97,15 @@ export class OwnedAgent {
     return (await this.#client.call<{ threads: Thread[] }>('GET', `${this.#path}/threads${query({ limit })}`)).threads;
   }
 
-  /** Every task since a moment with its steps (the export, read line by line). */
-  async export(since?: Date | string): Promise<(Task & { steps: Json[] })[]> {
-    const text = await this.#client.text('GET', `${this.#path}/export${query({ since: since ? new Date(since).toISOString() : undefined })}`);
+  /** Every task with its steps (the export, read line by line): since a moment, or filtered by time, status and kind. */
+  async export(filter?: Date | string | ExportFilter): Promise<(Task & { steps: Json[] })[]> {
+    const text = await this.#client.text('GET', `${this.#path}/export${exportQuery(filter)}`);
     return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Task & { steps: Json[] });
+  }
+
+  /** How many tasks that export would hold, before reading it. */
+  async exportCount(filter?: Date | string | ExportFilter): Promise<number> {
+    return (await this.#client.call<{ count: { tasks: number } }>('GET', `${this.#path}/export/count${exportQuery(filter)}`)).count.tasks;
   }
 
   async setLimits(limits: Limits): Promise<AgentInfo> {

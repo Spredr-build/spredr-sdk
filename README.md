@@ -287,6 +287,17 @@ paid twice and a customer is not charged twice. So put side effects in `ctx.trac
 If the handler takes another way than before (another question, another step), it runs for real from there on. What a
 step gives back comes back as JSON (a `Date` comes back as its text), up to 256 KB; a bigger one simply runs again.
 
+**Showing what it did.** `ctx.show(block)` draws a block in the task's page in the panel, in the order they were
+shown, and the panel's list says how many each task showed. It rides on the task's progress, so it costs no extra call
+to set up:
+
+```ts
+await ctx.show({ type: 'record', title: `Order ${order.id}`, record: order });
+await ctx.show({ type: 'table', title: 'Sales', columns: [{ key: 'region' }, { key: 'revenue', kind: 'money' }], rows });
+// a type of your own, drawn as a table
+await ctx.show({ type: 'x-heatmap', as: 'table', title: 'Visits by hour', columns: [{ key: 'hour' }, { key: 'visits', kind: 'num' }], rows: visits });
+```
+
 **Learning.** The agent reads the verdicts on its tasks with `agent.feedback()` and turns what it sees into a lesson
 with `agent.propose(text, why)`. A lesson goes live only when you approve it, and before that it can be tried on old
 tasks (`ctx.trial`).
@@ -446,8 +457,13 @@ await shop.memory({ scope: 'customer:ana' });
 await shop.forget('customer:ana');
 // proposed and live lessons; decide(id, 'accept') to approve one
 await shop.lessons();
-// every task with its steps
+// every task with its steps; or only some: since, until, status and kind
 await shop.export();
+await shop.export({ since: '2026-11-01', status: ['failed'], kind: ['refund'] });
+// how many that would be, before reading it
+await shop.exportCount({ status: ['failed'] });
+// what of each task you keep seeing: the customer covered, the messages as fingerprints
+await shop.setLimits({ data: { keep: 'rules', auto: true, rules: [{ path: 'input.customer', action: 'hide' }, { path: 'input.messages[].text', action: 'hash' }] } });
 // what waits for you, across every agent
 await spredr.inbox();
 ```
@@ -455,6 +471,12 @@ await spredr.inbox();
 **Limits keep a mistake small.** `autoPerDay` caps the actions it takes alone in a day; past it, it asks again.
 `spendPerDayUsd` caps what its model calls cost in a day, read from the steps it reports; past it, new tasks are
 refused until tomorrow.
+
+**Data rules decide what you see, not what the agent gets.** With `data` in `setLimits`, every view of yours (a task,
+the list, the export) comes masked: `hide` covers a field, `hash` turns it into `sha256:` and 12 hex (the same value,
+the same fingerprint, so two can still be told apart), `keep` leaves it, and `auto` also covers what looks like an
+email or a card. `keep: 'metrics'` keeps only the numbers. The agent and the task's caller always get the task whole,
+so the work and a retry go on with the real input.
 
 ## Traces
 

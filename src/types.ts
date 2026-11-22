@@ -207,6 +207,9 @@ export interface Summary {
   costUsd: number;
   perHour: number[];
   failedPerHour: number[];
+  /** Tokens hour by hour, and the typical time a task took in each hour (null where none finished). */
+  tokensPerHour?: number[];
+  p50PerHour?: (number | null)[];
   tools: { name: string; uses: number }[];
   freedom: { alone: number; asked: number; undone: number };
   /** The model its steps name most in those hours ('' when they name none). */
@@ -240,6 +243,27 @@ export interface Limits {
   keepDays?: 7 | 30 | 60 | 90 | 365 | 1825 | null;
   /** Days a fact may go unchanged before it is forgotten: 30, 90, 180 or 365; null: never by itself. */
   forgetAfterDays?: 30 | 90 | 180 | 365 | null;
+  /** What of each task's content you keep seeing: masked when you read it (a task, the list, the export); the agent and
+   *  the task's caller always get it whole. null: everything, as it is. */
+  data?: DataRules | null;
+}
+
+/** all: everything · rules: with the rules · metrics: only numbers (input and result come back null, hidden: true). */
+export interface DataRules {
+  keep: 'all' | 'rules' | 'metrics';
+  /** Also masks what looks like an email or a card number. */
+  auto: boolean;
+  /** path: input.… or output.…, with [] for each item of a list (input.messages[].text). hide: covered · hash:
+   *  sha256 and 12 hex, the same value the same fingerprint · keep: shown as it is. */
+  rules: { path: string; action: 'hide' | 'hash' | 'keep' }[];
+}
+
+/** Which tasks an export holds: since and until a moment, some statuses, some kinds. */
+export interface ExportFilter {
+  since?: Date | string;
+  until?: Date | string;
+  status?: TaskStatus[];
+  kind?: string[];
 }
 
 /** How full an agent's memory is: what its facts hold of what its plan gives it, in bytes. warn from 80 %, full from

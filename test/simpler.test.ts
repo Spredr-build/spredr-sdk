@@ -210,7 +210,7 @@ test('what a step gives back travels as JSON; too big or not JSON, the step keep
   }));
   await give(delivery('reply', {}));
   await resultOf(ai);
-  const memos = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').map((one) => (one.json as { steps: { name: string; memo?: unknown }[] }).steps[0]).map((step) => [step?.name, step?.memo]);
+  const memos = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').flatMap((one) => (one.json as { steps: { name: string; memo?: unknown }[] }).steps).map((step) => [step.name, step.memo]);
   assert.deepEqual(memos, [['nothing', { key: 'tool:nothing' }], ['big', undefined], ['circular', undefined]]);
 });
 
@@ -239,4 +239,21 @@ test('attack: a yes given to one amount is never reused for another; the same qu
   await give(delivery('refunds', { amount: 10 }, { id: 'tsk_2', answers: approved }));
   await until(() => ai.last('/agent/tasks/tsk_2/result'));
   assert.deepEqual(refunded, [10]);
+});
+
+test('steps travel in groups: hundreds of them in a few calls, all before the result, in order', async (t) => {
+  const { ai, give } = await running(t, (agent) => agent.on('reply', async (_, ctx) => {
+    for (let index = 1; index <= 120; index += 1) await ctx.step({ kind: 'tool', name: `step ${index}`, ms: 1 });
+    return 'ok';
+  }));
+  await give(delivery('reply', {}));
+  await resultOf(ai);
+  const sends = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps');
+  const names = sends.flatMap((one) => (one.json as { steps: { name: string }[] }).steps.map((step) => step.name));
+  assert.equal(names.length, 120, 'every step reached ai');
+  assert.deepEqual(names.slice(0, 3), ['step 1', 'step 2', 'step 3'], 'in the order they were taken');
+  assert.ok(sends.length <= 3, `in a few calls, not one each: ${sends.length}`);
+  const result = ai.seen.findIndex((one) => one.path.endsWith('/result'));
+  const lastSteps = ai.seen.map((one) => one.path.endsWith('/steps')).lastIndexOf(true);
+  assert.ok(lastSteps < result, 'all of them before the result');
 });

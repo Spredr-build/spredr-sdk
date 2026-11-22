@@ -58,9 +58,10 @@ export interface Context {
   /** The next piece of its answer, for whoever watches the task live (the caller's stream()): sent in order, a few at a
    *  time. A view, never the outcome: what the task returns is its result, and the pieces go once it is done. */
   stream(text: string): void;
-  /** Sends what stream() still holds: done for you before the task's result. */
+  /** Sends what stream() and the steps still hold: done for you before the task's result and before a question. */
   flush(): Promise<void>;
-  /** Reports one step it took (a model call, a tool): its trace and its costs come from these. */
+  /** Reports one step it took (a model call, a tool): its trace and its costs come from these. Steps go to spredr in
+   *  groups, a quarter of a second at most after they are taken; all of them before the task's result. */
   step(step: Step): Promise<void>;
   /** Runs `work`, times it, and reports it as a step (failed when it throws). Tokens and cost from what it returns, if
    *  `usage` reads them. Done once per task: when the task runs again (after a question, a retry) it gives back what
@@ -126,6 +127,10 @@ interface Part { id: string; agent: string; kind: string; status: string; result
 /** How long live text gathers before it is sent, and how much makes it go at once. */
 const STREAM_FLUSH_MS = 150;
 const STREAM_FLUSH_CHARS = 2_000;
+/** Steps go to ai in groups: up to this many in one report (what ai takes at once), gathered this long. One call per
+ *  step made a task of 400 steps take minutes over a slow link (22 Nov 2026: 18 min on the dev database). */
+const STEPS_PER_REPORT = 50;
+const STEPS_FLUSH_MS = 250;
 
 export function contextFor(client: Client, delivery: Delivery): Context {
   const { task } = delivery;
@@ -147,7 +152,28 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     }
     return sending;
   };
-  const report = (step: Step & { memo?: { key: string; value?: Json } }): Promise<unknown> => call('POST', `${path}/steps`, { attempt: task.attempt, steps: [step] }).catch(() => undefined);
+  // the steps: gathered, and sent in order, a group at a time. A step that leaves a memo for the next run goes at once
+  // (with those before it): if the process dies, what it did must not run again. Before a question and before the
+  // result everything gathered goes (flush). A step that cannot be sent is lost from the trace only, as before.
+  let steps: (Step & { memo?: { key: string; value?: Json } })[] = [];
+  let stepsTimer: ReturnType<typeof setTimeout> | null = null;
+  let reporting: Promise<void> = Promise.resolve();
+  const sendSteps = (): Promise<void> => {
+    if (stepsTimer) clearTimeout(stepsTimer);
+    stepsTimer = null;
+    while (steps.length) {
+      const group = steps.slice(0, STEPS_PER_REPORT);
+      steps = steps.slice(STEPS_PER_REPORT);
+      reporting = reporting.then(() => call('POST', `${path}/steps`, { attempt: task.attempt, steps: group })).then(() => undefined, () => undefined);
+    }
+    return reporting;
+  };
+  const report = (step: Step & { memo?: { key: string; value?: Json } }): Promise<void> => {
+    steps.push(step);
+    if (step.memo || steps.length >= STEPS_PER_REPORT) return sendSteps();
+    if (!stepsTimer) stepsTimer = setTimeout(() => void sendSteps(), STEPS_FLUSH_MS);
+    return Promise.resolve();
+  };
 
   // The journal: what the task already lived. Each ask and each step takes the next entry while the handler does what
   // it did before; the first one that differs (another action, another step) ends the replay, and from there on it all
@@ -204,6 +230,8 @@ export function contextFor(client: Client, delivery: Delivery): Context {
       }
       // another action than the one answered here: the handler changed its way, so from here on it asks for real
       nextAnswer = answers.length;
+      // the steps that led here are in the trace before the task waits
+      await sendSteps();
       const { pause } = await call<{ pause: { status: string; answer: Answer | null } }>('POST', `${path}/pause`, { attempt: task.attempt, action, question, ...extra });
       if (pause.status === 'answered' && pause.answer) return pause.answer;
       throw PAUSED;
@@ -214,7 +242,7 @@ export function contextFor(client: Client, delivery: Delivery): Context {
       if (pending.length >= STREAM_FLUSH_CHARS) void flushNow();
       else if (!flushTimer) flushTimer = setTimeout(() => void flushNow(), STREAM_FLUSH_MS);
     },
-    flush: () => flushNow(),
+    flush: async () => { await Promise.all([flushNow(), sendSteps()]); },
     async progress(data) {
       await call('POST', `${path}/progress`, { attempt: task.attempt, data });
     },
@@ -224,7 +252,7 @@ export function contextFor(client: Client, delivery: Delivery): Context {
       await call('POST', `${path}/progress`, { attempt: task.attempt, data: { show: data } });
     },
     async step(step) {
-      await call('POST', `${path}/steps`, { attempt: task.attempt, steps: [step] });
+      await report(step);
     },
     track: (kind, name, work, usage) => once(kind, name, name, work, (value) => (usage ? usage(value) : {})),
     model: (work, name) => once('model', name ?? '', (value) => name ?? usageOf(value).model ?? 'model', work, usageOf),

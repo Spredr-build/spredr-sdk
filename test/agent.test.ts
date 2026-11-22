@@ -162,7 +162,8 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
     ['POST', '/agent/tasks', { kind: 'follow-up', input: { customer: 'ana' }, at: '2026-12-01T09:00:00.000Z', key: 'ana-follow' }],
   ]);
   // the note, then remember and later as steps carrying their memo, so the next run does neither again
-  const steps = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').map((one) => (one.json as { steps: { kind: string; name: string; memo?: { key: string; value?: unknown } }[] }).steps[0]);
+  // (steps travel in groups: a memo sends the ones gathered before it at once, in order)
+  const steps = ai.seen.filter((one) => one.path === '/agent/tasks/tsk_1/steps').flatMap((one) => (one.json as { steps: { kind: string; name: string; memo?: { key: string; value?: unknown } }[] }).steps);
   assert.deepEqual(steps.map((step) => [step?.kind, step?.name, step?.memo]), [
     ['other', 'note', undefined],
     ['memory', 'remember', { key: 'memory:remember:customer:ana', value: { id: 'ft_1' } }],

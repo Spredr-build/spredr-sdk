@@ -132,6 +132,7 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
   const { ai, give } = await running(t, {
     reply: async (_, ctx) => {
       await ctx.progress({ step: 'looking' });
+      await ctx.show({ type: 'record', title: 'Pedido 1042', record: { order: 1042, paid: true } });
       await ctx.step({ kind: 'other', name: 'note', ms: 1 });
       await ctx.memory.remember('customer:ana', 'Asked about Sunday', { key: 'last' });
       const facts = await ctx.memory.recall({ scope: 'customer:ana', q: 'sunday' });
@@ -151,6 +152,8 @@ test('memory, progress, steps and later tasks go to ai, signed by the agent', as
   const calls = ai.seen.filter((one) => one.path !== '/agent/hello' && !one.path.endsWith('/result') && !one.path.endsWith('/steps')).map((one) => [one.method, one.path, one.json]);
   assert.deepEqual(calls, [
     ['POST', '/agent/tasks/tsk_1/progress', { attempt: 1, data: { step: 'looking' } }],
+    // a block rides on progress, under «show»: the panel draws it in the task's page
+    ['POST', '/agent/tasks/tsk_1/progress', { attempt: 1, data: { show: { type: 'record', title: 'Pedido 1042', record: { order: 1042, paid: true } } } }],
     // every memory call names its task: ai takes the tenant from it
     ['PUT', '/agent/memory', { task: 'tsk_1', scope: 'customer:ana', text: 'Asked about Sunday', key: 'last' }],
     ['GET', '/agent/memory?scope=customer%3Aana&q=sunday&task=tsk_1', undefined],

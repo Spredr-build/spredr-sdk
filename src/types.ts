@@ -158,6 +158,25 @@ export interface AskOptions {
 }
 
 /** One step inside a task: a model call, a tool, a memory read. Its trace and its costs come from these. */
+/** What the task shows in its page in spredr's panel (ctx.show): a block of one of the types the panel draws, with its
+ *  fields, or a type of your own with `as`, the base type to draw it with (until then the panel shows it as JSON).
+ *  - answer: `sections` [{ title, paragraphs: [[text | { cite: [n] }]] }], `sources` [{ id, title, domain, date, cited }]
+ *  - findings: `findings` [{ title, where, severity: critical | high | medium | low, category, description, fix, evidence? }]
+ *  - image: `src`, `fields` [{ key, value, confidence, box? }], `checks` [{ label, ok }]
+ *  - vision: `images` [{ src, name, width, height, detections: [{ label, confidence, box: { x, y, w, h } }] }]
+ *  - record: `title`, `record` (any object), `date?`, `state?`, `amount?`
+ *  - table: `columns` [{ key, kind }], `rows`, `metrics?`
+ *  - audio: `src`, `duration`, `speakers`, `turns` [{ at, end, speaker, text }], `moments?`
+ *  Media go by reference (a URL or your bucket's path), never as bytes. Up to 256 KB a block. */
+export interface Block {
+  type: 'answer' | 'findings' | 'image' | 'vision' | 'record' | 'table' | 'audio' | (string & {});
+  /** For a type of your own: the base type the panel draws it with. */
+  as?: 'answer' | 'findings' | 'image' | 'vision' | 'record' | 'table' | 'audio';
+  /** What the block is about, above it: «Comprobante», «Ventas de octubre». */
+  title?: string;
+  [field: string]: Json | undefined;
+}
+
 export interface Step {
   kind: 'model' | 'tool' | 'memory' | 'other';
   name: string;

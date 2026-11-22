@@ -8,7 +8,7 @@
 import type { Client } from './http.ts';
 import { PartError, RateLimitError } from './errors.ts';
 import { query } from './http.ts';
-import type { Answer, Fact, Json, SessionFile, Step, Task } from './types.ts';
+import type { Answer, Block, Fact, Json, SessionFile, Step, Task } from './types.ts';
 import { usageOf } from './usage.ts';
 
 /** Two JSON values with the same content, whatever the order of their keys. */
@@ -51,6 +51,10 @@ export interface Context {
    *  again when the task runs again, it gives back the same answer without asking. */
   ask(action: string, question: string, extra?: { options?: string[]; data?: Json }): Promise<Answer>;
   progress(data: Json): Promise<void>;
+  /** Shows a block in the task's page in spredr's panel: an answer with its sources, findings, an image with what was
+   *  read in it, a batch of images, a record, a table or a voice recording (Block). Shown in the order sent, kept with
+   *  the task, and part of its export. Up to 256 KB each; media by reference. */
+  show(block: Block): Promise<void>;
   /** The next piece of its answer, for whoever watches the task live (the caller's stream()): sent in order, a few at a
    *  time. A view, never the outcome: what the task returns is its result, and the pieces go once it is done. */
   stream(text: string): void;
@@ -213,6 +217,11 @@ export function contextFor(client: Client, delivery: Delivery): Context {
     flush: () => flushNow(),
     async progress(data) {
       await call('POST', `${path}/progress`, { attempt: task.attempt, data });
+    },
+    // a block rides on progress: ai keeps it as one of the task's events, and the panel draws what carries «show»
+    async show(block) {
+      const data: Json = Object.fromEntries(Object.entries(block).filter((entry): entry is [string, Json] => entry[1] !== undefined));
+      await call('POST', `${path}/progress`, { attempt: task.attempt, data: { show: data } });
     },
     async step(step) {
       await call('POST', `${path}/steps`, { attempt: task.attempt, steps: [step] });

@@ -277,6 +277,7 @@ The options, besides the manifest (`description`, `tasks`, `actions`, `tools`, `
 | `ctx.delegate(agent, kind, input?, { title?, key? })` | Hands a part of this task to another of your agents and waits for its result (a `PartError` when it failed or was canceled). Several at once with `Promise.all`. You allow it in that agent's settings (whom it may ask, how many at once, how long a chain may grow); the panel draws the chain. |
 | `ctx.tenant`, `ctx.thread` | Whom this task works for (a user, an account, a team, a business; `""` when no one in particular) and its conversation. |
 | `ctx.progress(data)` | Tells the caller how it is going, and keeps a long task alive. |
+| `ctx.show(block)` | Shows a block in the task's page in spredr's panel: an answer with its sources (`answer`), findings (`findings`), an image with what was read in it (`image`), a batch of images (`vision`), a record (`record`), a table (`table`) or a voice recording (`audio`). A type of your own names `as`, the base type to draw it with. Media by reference; up to 256 KB each. |
 | `ctx.stream(text)` | The next piece of its answer, for a caller watching live (`live()` or `stream(id)`). Sent in order, a few at a time, and the last pieces before its result. A view: the result is what stays. |
 
 **Nothing happens twice.** When a task comes back (after a question, or given again after a crash), its handler runs

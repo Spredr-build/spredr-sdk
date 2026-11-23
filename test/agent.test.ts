@@ -215,3 +215,19 @@ test('what a task prints carries its id, and each task ends with a line of its o
   assert.equal(lines.find((line) => line.startsWith('tsk_2')), 'tsk_2 broken failed: the shop API is down');
   assert.equal(currentTask(), null, 'outside a task, no task');
 });
+
+test('a task past its plan\'s room for steps goes on, and its logs say so once', async (t) => {
+  const warned: string[] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(' ')); };
+  t.after(() => { console.warn = warn; });
+  const { ai, give } = await running(t, {
+    reply: async (_input, ctx) => {
+      for (let index = 0; index < 120; index += 1) await ctx.step({ kind: 'tool', name: `t${String(index)}`, ms: 1 });
+      return 'done';
+    },
+  }, (request) => (request.path.endsWith('/steps') ? { body: { ok: true, kept: 0, dropped: 50, room: 1000 } } : undefined));
+  await give(delivery('reply', {}));
+  assert.equal((await resultOf(ai))?.result, 'done', 'the task still finished');
+  assert.equal(warned.filter((line) => line.includes('1000 steps its plan keeps')).length, 1, 'said once, not per report');
+});

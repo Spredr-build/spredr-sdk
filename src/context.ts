@@ -158,13 +158,20 @@ export function contextFor(client: Client, delivery: Delivery): Context {
   let steps: (Step & { memo?: { key: string; value?: Json } })[] = [];
   let stepsTimer: ReturnType<typeof setTimeout> | null = null;
   let reporting: Promise<void> = Promise.resolve();
+  let capped = false;
   const sendSteps = (): Promise<void> => {
     if (stepsTimer) clearTimeout(stepsTimer);
     stepsTimer = null;
     while (steps.length) {
       const group = steps.slice(0, STEPS_PER_REPORT);
       steps = steps.slice(STEPS_PER_REPORT);
-      reporting = reporting.then(() => call('POST', `${path}/steps`, { attempt: task.attempt, steps: group })).then(() => undefined, () => undefined);
+      reporting = reporting.then(() => call<{ dropped?: number; room?: number }>('POST', `${path}/steps`, { attempt: task.attempt, steps: group })).then((answer) => {
+        // past the plan's room for steps the task goes on, its steps are not kept: said once, where its logs are read
+        if ((answer?.dropped ?? 0) > 0 && !capped) {
+          capped = true;
+          console.warn(`spredr: this task reached the ${String(answer?.room ?? '')} steps its plan keeps; the ones after are not kept (its history in spredr says where).`);
+        }
+      }, () => undefined);
     }
     return reporting;
   };

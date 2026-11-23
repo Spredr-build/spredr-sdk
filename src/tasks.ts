@@ -74,9 +74,16 @@ export class Tasks<K extends Kinds = AnyKinds> {
     return (await this.#client.call<{ events: TaskEvent[] }>('GET', `/tasks/${encodeURIComponent(id)}/events${query({ after: after || undefined, wait: wait || undefined })}`)).events;
   }
 
-  /** What the agent did inside a task, step by step: its trace. */
-  async steps(id: string): Promise<(Step & { seq: number; at: string })[]> {
-    return (await this.#client.call<{ steps: (Step & { seq: number; at: string })[] }>('GET', `/tasks/${encodeURIComponent(id)}/steps`)).steps;
+  /** What the agent did inside a task, step by step: its trace, whole. ai hands it over a page at a time (a task may
+   *  hold thousands of steps); this asks for each page in turn and gives them all back in order. */
+  async steps(id: string): Promise<(Step & { seq: number; at: string; endMs?: number })[]> {
+    const all: (Step & { seq: number; at: string; endMs?: number })[] = [];
+    for (;;) {
+      const last = all.at(-1);
+      const page = await this.#client.call<{ steps: (Step & { seq: number; at: string; endMs?: number })[]; more?: boolean }>('GET', `/tasks/${encodeURIComponent(id)}/steps${query({ after: last?.seq, from: last?.endMs })}`);
+      all.push(...page.steps);
+      if (!page.more || !page.steps.length) return all;
+    }
   }
 
   async cancel(id: string): Promise<Task> {

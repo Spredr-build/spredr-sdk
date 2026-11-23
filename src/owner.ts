@@ -156,7 +156,9 @@ export class OwnedAgent {
     return (await this.#client.call<{ schedule: { id: string; nextAt: string } }>('POST', `${this.#path}/schedules`, { name, kind, cron, ...options })).schedule;
   }
 
-  /** A secret address that starts a task with whatever is POSTed to it; the address comes back this once. */
+  /** A secret address that starts a task of `kind` for each POST to it; the address comes back this once. The task's
+   *  input is `{ body, headers }`: what was posted, and its content-type, user-agent, x-… and stripe-signature headers
+   *  (to check the sender's signature). An idempotency-key header makes a retried POST the same task. */
   async hook(name: string, kind: string) {
     return this.#client.call<{ hook: { id: string; name: string }; url: string }>('POST', `${this.#path}/hooks`, { name, kind });
   }

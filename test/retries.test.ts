@@ -91,3 +91,16 @@ test('a fact without a key is written once, even when ai fails: sent twice it wo
   await assert.rejects(signed.call('PUT', '/agent/memory', { scope: 'customer:ana', text: 'x', key: 'last' }), InternalServerError);
   assert.equal(ai.seen.length, 4, 'with a key it replaces, so it is tried again');
 });
+
+test('a 503 «busy» that says when to come back is asked again whatever the method: ai turned it away before doing anything', async () => {
+  const busy = { status: 503, body: { error: 'ai is busy right now: try again in a moment.' }, headers: { 'retry-after': '0' } };
+  const ai = fakeAi(inTurn(busy, { status: 201, body: { task: { id: 'tsk_1', status: 'queued' }, created: true } }));
+  const shop = new Caller({ id: 'cl_shop', key: newKeys().privateKey, agent: 'shop', ai: BASE, fetch: ai.fetch, ...FAST });
+  assert.equal((await shop.ask('reply', { text: 'hola' }, { tenant: 't1' })).id, 'tsk_1');
+  assert.equal(ai.seen.filter((one) => one.method === 'POST').length, 2, 'asked again once, after the busy');
+  // a 503 that says nothing of coming back may have done its work: a POST is never sent twice
+  const failing = fakeAi(() => ({ status: 503, body: { error: 'spredr did not answer in time: try again in a moment.' } }));
+  const other = new Caller({ id: 'cl_shop', key: newKeys().privateKey, agent: 'shop', ai: BASE, fetch: failing.fetch, ...FAST });
+  await assert.rejects(other.ask('reply', { text: 'hola' }, { tenant: 't1' }), (error: unknown) => error instanceof SpredrError && error.status === 503);
+  assert.equal(failing.seen.length, 1);
+});

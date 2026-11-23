@@ -442,8 +442,10 @@ await spredr.register('shop', 'shop-agent');
 await shop.addCaller('shop-api', { service: 'shop-api' });
 // a task every morning at 8, Bogotá time
 await shop.schedule('morning', 'digest', '0 8 * * *', { tz: 'America/Bogota' });
-// a webhook URL that makes tasks
+// a webhook URL that makes tasks: each POST to it is a «new-order» task whose input is { body, headers }, the JSON
+// posted and its content-type, user-agent, x-… and stripe-signature headers (to check a provider's signature)
 await shop.hook('orders', 'new-order');
+// agent.on('new-order', async ({ body, headers }, ctx) => { … body.order … })
 // ask before refunds
 await shop.setFreedom('refund', 'ask');
 // at most 200 actions alone and 15 USD a day
@@ -503,8 +505,9 @@ handle: `BadRequestError` (400), `AuthenticationError` (401), `PermissionDeniedE
 `TimeoutError` (no answer). A task that ends badly is a `TaskError`.
 
 A request is tried again only when that is safe: no answer came or spredr failed, on a call that does the same thing
-twice (reads, updates, deletes, and a task asked with its own `key`). A 429 is tried again only when spredr says how
-long to wait, so a cap reached comes straight back to you. Each side takes the same options:
+twice (reads, updates, deletes, and a task asked with its own `key`). A 429, or a 503 «busy», is tried again whatever
+the call when spredr says how long to wait (`Retry-After`): spredr says it only when it turned the request away before
+doing anything. A cap reached comes straight back to you. Each side takes the same options:
 
 | Option | Default | |
 |---|---|---|
@@ -527,8 +530,12 @@ spredr writes these into your services when you register an agent or link a back
 
 ## Plans
 
-An agent runs as one of your plan's services, so Starter runs up to 3 and Pro up to 10. The plan also sets the tasks a
+An agent runs as one of your plan's services, so Starter runs up to 6 and Pro up to 10. The plan also sets the tasks a
 month, how much each agent remembers and how long finished tasks are kept. Exporting and traces are always included.
+
+**Long tasks.** A task keeps up to its plan's steps and notes (1,000 today). Past it the task keeps working and
+finishes as always: the steps after are not kept, its history in the panel marks where it reached the limit, and the
+SDK says so once in the agent's logs. `tasks.steps(id)` hands over a task's whole history, a page at a time.
 See [spredr.cloud/pricing](https://spredr.cloud/pricing).
 
 ## Without the SDK

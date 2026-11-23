@@ -1,7 +1,8 @@
 // Calling ai: signed (an agent or a backend) or with a spredr token (an owner). Errors carry ai's own words, as the class
 // of their case (errors.ts). A request is tried again only when that is safe: no answer came or ai failed, on a method
-// that does the same thing twice (GET, PUT, DELETE, or a POST the caller marks idempotent), and a 429 only when ai said
-// how long to wait. Each try is signed anew: a signature is good once.
+// that does the same thing twice (GET, PUT, DELETE, or a POST the caller marks idempotent); and a 429 or a 503 that says
+// how long to wait (Retry-After), whatever the method: ai says that only when it turned the request away before doing
+// anything (its turns were full), so the same request again is the same request once. Each try is signed anew.
 
 import type { KeyObject } from 'node:crypto';
 import { ConnectionError, errorFor, SpredrError, TimeoutError } from './errors.ts';
@@ -118,7 +119,9 @@ export function client(base: string, auth: Auth, options: ClientOptions = {}): C
       }
       if (response.ok || last) return response;
       const retryAfter = retryAfterOf(response);
-      const again = response.status === 429 ? retryAfter !== null && retryAfter <= MAX_RETRY_AFTER_S : repeatable && (response.status === 408 || response.status >= 500);
+      // turned away before anything was done (a 429, or a 503 «busy» with its Retry-After): safe for any method
+      const turnedAway = (response.status === 429 || response.status === 503) && retryAfter !== null && retryAfter <= MAX_RETRY_AFTER_S;
+      const again = turnedAway || (response.status !== 429 && repeatable && (response.status === 408 || response.status >= 500));
       if (!again) return response;
       await response.body?.cancel();
       await waitBefore(tryNumber, retryAfter);
